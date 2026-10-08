@@ -387,6 +387,91 @@ Demo sessions and the switcher are labelled insecure in the UI and README.
 
 **Execution status.** Claude has not executed or tested any of this.
 
+### AUTH-001 — Claude follow-up: completion pass (2026-10-08)
+
+**Status:** READY FOR CODEX. **Attempt:** 2 (follow-up to the entry above).
+**Baseline read:** `2c0ae9d2e24fe6c295c152037612935cec9e490c` (branch head; no new section-1
+brief or section-3 entry was on the branch; the task came from the user in chat).
+**Previous implementation commit:** `d931723d5bfd9792187dd6ca2f0acdf19b5c1fd5`
+(Codex reported 51/51 tests passing on Node 24.19.0; browser verification still pending).
+**This implementation commit:** `07ba47969598147767b63d49470f580872ed4b80` on `claude/jolly-cerf-5lqzti`.
+**Tests:** NOT RUN BY CLAUDE. Claude did not run code, tests, builds, previews, browser sessions
+or deployments. Codex verification is not claimed for this commit.
+
+**What the source review found and what changed:**
+
+1. A rejected person had no way to change the handle a reviewer objected to (the seeded
+   `rowan` rejection asks exactly that). Added `PATCH /api/me/profile` for display name,
+   handle and bio, with the same validation and handle uniqueness as registration. Status,
+   role, identity hash and demo-login flag cannot change through it. New `#/profile` page,
+   linked from the nav (signed-in, not suspended), the feed sidebar, and the rejected status card.
+2. The suspended status page was a dead end. Added `POST /api/suspension/appeal` (10–1000
+   chars, one appeal per suspension, updatable). Reviewers see it in the Members tab next to
+   the suspension reason; a new "Suspension appeals" stat and tab count; reinstatement clears it.
+3. Authors could not remove their own content. Added `DELETE /api/posts/:postId` and
+   `DELETE /api/posts/:postId/comments/:commentId` (author only; reviewers keep their own
+   logged removal route). Removal records `by: 'author' | 'reviewer'`; report targets show
+   "Removed by its author" or "Removed by a reviewer". Nothing is erased.
+4. Demo sessions now expire after 30 days (`SESSION_TTL_MS`, exported for tests). The
+   member-facing self view no longer includes the reviewer's id.
+5. `lib/store.js`: a corrupt `state.json` is moved to `state.json.corrupt-<ts>.json` with a
+   logged warning and the app starts fresh; missing collections in an old file are repaired.
+6. Landing page: added "What we aim for / What this prototype cannot promise" cards and a
+   rules-appeals-privacy summary; footer links to Rules, Recover and Demo accounts.
+7. Reviewer Members tab: new "Notes and appeals" column (suspension reason, appeal,
+   rejection reason, hidden-post count).
+
+**Changed files:** `lib/app.js`, `lib/store.js`, `public/app.js`, `public/index.html`,
+`public/styles.css`, `README.md`, `test/access.test.js` (delete routes added to the denial
+matrix); new `test/profile.test.js`, `test/authoring.test.js`, `test/suspension.test.js`,
+`test/store.test.js`. Expected total: 12 suites (plus `test/helpers.js`, which defines none).
+
+**Routes added:** `PATCH /api/me/profile`, `POST /api/suspension/appeal`,
+`DELETE /api/posts/:postId`, `DELETE /api/posts/:postId/comments/:commentId`.
+All other routes unchanged; README API table matches the route list in `lib/app.js`
+(checked by grep during review). Every frontend `api()` call maps to a defined route.
+
+**Suggested commands (PowerShell, repo root):**
+
+```
+node --check server.js
+node --check lib/app.js
+node --check lib/store.js
+node --check public/app.js
+node --test
+node server.js
+```
+
+**Demo walkthrough additions (README steps 7–9):** as `rowan`, change handle on Profile, then
+resubmit; as `dex`, send an appeal, then as `imani` see it under Reviewer → Members and
+reinstate; as any verified member, edit profile and delete one of your own posts.
+
+**Review checklist outcomes:** routes vs README: match. Frontend actions vs routes: match.
+State transitions: every change of `status`/`role` happens only in reviewer routes or in
+`verification/submit` (to `pending` only); profile and registration ignore those fields
+(tests assert it). Error responses: all carry `error`, `message` and, where relevant,
+`field`/`status`. Moderation: every reviewer action is behind `requireReviewer` and logged;
+author deletions are not logged as reviewer actions by design. Seeded data and walkthrough
+re-checked. No raw identifier or `personHash` in any response (tests assert on `/api/me`,
+member profiles and reviewer overview). User content is only ever `textContent`. Mobile:
+feed grid collapses under 860px, nav wraps, tables scroll horizontally. Keyboard: native
+buttons/links, `aria-pressed` reactions, roving-tabindex tablist with arrow keys, native
+`<dialog>` confirmations with focus return. No TODOs, placeholder buttons or dead routes found.
+
+**Known limitations and remaining risks:**
+
+- Unexecuted changes: the new code paths most likely to fail on first run are
+  `viewProfile`/`appealForm` in `public/app.js` and the DELETE routes (new HTTP method in the
+  dispatcher; `readJson` tolerates an empty body). Report file, line and verbatim error.
+- `test/store.test.js` writes a deliberately corrupt file and expects a backup named
+  `state.json.corrupt-<timestamp>.json`; on Windows the rename should be fine, but if an
+  antivirus holds the file, the test would surface it.
+- Posts and comments can be deleted but not edited. No notifications. Appeals have no
+  deadline or second-reviewer rule. Still no rate limiting (documented in README).
+- Browser visual and keyboard verification is still pending from the previous entry.
+
+**Execution status.** Claude has not executed or tested any of this.
+
 ---
 
 ## 3. Codex test results (maintained by Codex)

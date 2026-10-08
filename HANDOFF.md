@@ -293,6 +293,100 @@ subscriptions; explain costs before any paid API use.
 
 **Execution status.** Claude has not executed or tested any project code.
 
+### AUTH-001 — Claude implementation handoff (2026-10-08)
+
+**Status:** READY FOR CODEX. **Attempt:** 1.
+**Pinned source baseline (from brief):** `29c469e6e486e061f93a6e9e12f11bda170b58ad`.
+**Brief commit read:** `e4e9b3937e78a8809ca89342b865a438cad6fe61`.
+**Implementation commit:** `d931723d5bfd9792187dd6ca2f0acdf19b5c1fd5` on `claude/jolly-cerf-5lqzti`.
+**Tests:** NOT RUN BY CLAUDE. Nothing in this entry has been executed, syntax-checked,
+built or previewed by Claude. Codex owns all execution and verification on the Asus.
+
+**Changed files (all new):**
+
+- `server.js` — entry point; `node server.js` serves `http://127.0.0.1:3000`.
+- `lib/app.js` — HTTP server, routing, sessions, access control, feed, moderation,
+  static files, security headers. Exports `createApp({ dataDir, publicDir, seed, logger })`.
+- `lib/store.js` — JSON-file persistence (`data/state.json`), atomic temp-file + rename,
+  serialised and coalesced saves, rename retry for Windows file locks.
+- `lib/seed.js` — fictional demo accounts, posts, comments, reactions, reports, action history.
+- `lib/models.js`, `lib/identity.js`, `lib/rules.js` — record factories, person-id hashing,
+  community rules.
+- `public/index.html`, `public/styles.css`, `public/app.js`, `public/favicon.svg` — single-page
+  frontend with hash routes; DOM built with `createElement`/`textContent` only, no `innerHTML`.
+- `test/helpers.js` plus eight `test/*.test.js` suites.
+- `README.md` — Windows launch, demo accounts, walkthrough, API table, limitations, production gaps.
+- `.gitignore` — ignores `data/` (generated state) and tooling files.
+
+**Dependencies:** none. Node.js 18+ (20 LTS recommended). Built-ins only: `node:http`,
+`node:fs`, `node:path`, `node:crypto`, `node:test`, `node:assert`, global `fetch`.
+
+**Suggested commands (PowerShell, in the repo root):**
+
+```
+node --check server.js
+node --check lib/app.js
+node --test
+node server.js
+```
+
+Then open `http://127.0.0.1:3000`. Stop with Ctrl+C. Delete `data\state.json` to reseed.
+
+**API routes:** see the table in README.md. Summary: public `GET /api/health`, `/api/rules`,
+`/api/me`, `/api/auth/demo-accounts`; session `POST /api/auth/demo-login`, `/logout`,
+`/api/onboarding/register`, `/api/auth/recover`, `/api/verification/submit`; verified-only
+`GET /api/feed`, `POST /api/posts`, `/api/posts/:id/comments`, `/api/posts/:id/reactions`,
+`GET /api/members/:id`, `POST /api/members/:id/{block,unblock,mute,unmute}`, `POST /api/reports`;
+reviewer-only `GET /api/reviewer/overview`, `/actions`, `POST /api/reviewer/verifications/:id/{approve,reject}`,
+`/api/reviewer/members/:id/{suspend,reinstate}`, `/api/reviewer/content/:type/:id/remove`,
+`/api/reviewer/reports/:id/resolve`. Sessions: `HttpOnly` cookie `gather_session` or
+`Authorization: Bearer <token>`. JSON bodies limited to 32 KB.
+
+**Demo accounts (all fictional; use the Demo accounts page or the identifier on Recover):**
+`imani` reviewer/verified `DEMO-IMANI-0001`; `theo`, `priya`, `mateo` verified
+(`DEMO-THEO-0002`, `DEMO-PRIYA-0003`, `DEMO-MATEO-0004`); `samw` pending `DEMO-SAM-0005`;
+`rowan` rejected `DEMO-ROWAN-0006`; `dex` suspended `DEMO-DEX-0007`. Accounts created through
+onboarding are not in the switcher; recover them with their identifier.
+
+**How the brief's requirements map:**
+
+1. Landing page with demo banner, value props, how-it-works. Name "Gather", provisional.
+2. Two-step onboarding: register (unverified) then consent + submit (pending). Rejection shows
+   the reason and offers resubmit/appeal via the same submit endpoint.
+3. One account per person: SHA-256 of the normalised identifier with a fixed non-secret salt;
+   check and insert are synchronous in one handler, so concurrent requests cannot both pass.
+   Duplicate gets `409 person_already_registered` plus a recovery pointer. Simulated only.
+4. Every member endpoint calls `requireMember` on the server; non-verified states get
+   `403 not_verified` with their status, no session gets `401`. `/api/me` always works.
+5. Feed with seeded posts, composer, comments, three reactions, profile dialog, verified badge,
+   skeleton/empty/error states, counters and inline validation. State persists via JSON file.
+6. Block (both directions), mute (viewer only), report post/comment/member with reason enum.
+   Rules page served from the server. No automatic negativity detection is claimed.
+7. Reviewer dashboard: queue approve/reject, reports dismiss/remove/suspend, members
+   suspend/reinstate, history. All checked by `requireReviewer` on the server. Demo switcher only
+   works for seeded accounts; no endpoint lets a member set status or role.
+8. Keyboard-accessible: native buttons, labels, `aria-pressed`, tablist with arrow keys,
+   `<dialog>` confirmations for every moderation action, visible focus, skip link, responsive
+   grid, reduced-motion support. Warm neutrals with jade accents, system fonts only.
+
+**Security:** strict CSP (`script-src 'self'`, `style-src 'self'`, no inline), `nosniff`,
+`X-Frame-Options: DENY`, path-traversal guard, loopback bind, raw identifier never stored.
+Demo sessions and the switcher are labelled insecure in the UI and README.
+
+**Known limitations / things Codex is most likely to hit:**
+
+- Unexecuted code: a typo anywhere would surface in `node --check` or the first test run.
+  Report the file, line and verbatim error; Claude fixes without re-running.
+- `node --test` discovers `test/helpers.js` too; it defines no tests and should report zero.
+- Tests need Node 18.8+ for `before`/`after` hooks and global `fetch`. If the Asus has an
+  older Node, report the version.
+- Posts cannot be edited or deleted by authors; suspended members' content is hidden, not deleted.
+- No notifications: a pending user refreshes the status page after approval.
+- Avatars set a background colour through `element.style`; if a browser's CSP handling blocks
+  it, avatars fall back to the stylesheet's jade colour. Not a functional failure.
+
+**Execution status.** Claude has not executed or tested any of this.
+
 ---
 
 ## 3. Codex test results (maintained by Codex)

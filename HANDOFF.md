@@ -57,6 +57,95 @@ must state the same baseline and the resulting implementation commit or patch.
 
 ---
 
+### AUTH-001 — Verified-community web prototype
+
+**Status:** READY FOR CLAUDE. **Attempt:** 1.
+**Pinned source baseline:** `29c469e6e486e061f93a6e9e12f11bda170b58ad`.
+**Working branch:** `claude/jolly-cerf-5lqzti`. Read the latest brief commit before
+writing; include both this source baseline and your read/implementation commits
+in your section-2 reply. Preserve previous handoff entries.
+
+**User goal:** Build a social media app centered on authenticity: access only
+after verification, one active account per person, and controlled trolling and
+negativity. The user selected a web app with SIMULATED verification for testing.
+This is a local prototype, not a production identity-verification service.
+
+**Deliverable:** A polished, responsive, runnable web app with an actual local
+server and persistent demo state. Claude writes source, designs, documentation,
+and test source ONLY. Codex installs if necessary, executes, tests, and inspects
+the UI exclusively on the Windows Asus. Do not run code, tests, builds, previews,
+or deployments. Do not introduce paid APIs or identity services.
+
+**Implementation constraints:** Use plain HTML/CSS/JavaScript and Node.js built-in
+modules so the first prototype needs no dependency installation or build. Supply
+`server.js`, frontend files in `public/`, meaningful Node test files in `test/`,
+and a README with exact Windows launch instructions. Use `node --test` for tests
+and `node server.js` for the app at `http://127.0.0.1:3000`. Bind to loopback by
+default. Keep generated demo data ignored in Git. Export server/state helpers
+as needed for isolated tests. Never commit real personal information or secrets.
+
+**Required flows:**
+
+1. Landing page explaining a smaller community of verified people, respectful
+   participation, and privacy. Clearly visible "Demo: simulated verification"
+   messaging. Use an original working name such as "Gather"; branding is provisional.
+2. Demo onboarding: display name, community handle, and a synthetic demo person
+   identifier. Consent explains that no real ID/selfie is collected. States:
+   unverified, pending, verified, rejected, suspended. Submission goes to a review
+   queue; rejection includes a reason and a resubmission/appeal path.
+3. One active demo account per synthetic person identifier, enforced by the
+   server atomically. Demonstrate a duplicate attempt, and direct an existing
+   person toward account recovery instead of creating another account. State
+   explicitly that this simulates uniqueness; real-world identity matching is
+   outside this task.
+4. Only verified, unsuspended members can read the community feed or create
+   posts, comment, or react. Enforce this at every relevant server endpoint,
+   including direct API requests. Pending/rejected users see their own status.
+5. Verified-member feed with seeded fictional posts, composer, comments,
+   reactions, profile cards, and verification badges. Support empty/loading/error
+   states, field validation, and persistent changes across server restarts.
+6. Block/mute a member, report a post/comment/member with a reason, and view clear
+   community rules. Block/mute removes their content from the viewer's feed.
+   Moderation addresses harassment, threats, impersonation, and spam; ordinary
+   disagreement is allowed. Avoid promising automatic detection of negativity.
+7. Demo reviewer dashboard: approve/reject pending accounts, review reports,
+   remove content, suspend/reinstate accounts, and show an action history. Reviewer
+   privileges are checked on the server. Clearly labeled local demo account
+   selection is acceptable for testing; do not present it as production auth.
+   Never let member endpoints assign their own verified/reviewer status.
+8. Readable keyboard-accessible interface on desktop and mobile, proper labels,
+   visible focus, sufficient contrast, and confirmation for moderation actions.
+   Aim for a calm, distinctive design with warm neutrals and jade accents.
+
+**Security boundaries:** Treat all submitted content as untrusted, render as
+text rather than executable HTML, validate inputs and request sizes, and avoid
+exposing synthetic identity keys in public profiles. Demo sessions and reviewer
+selection must be labeled as insecure for production. Include a short README
+section listing production gaps: real verification provider, real authentication,
+identity deduplication/recovery, privacy and retention decisions, moderation
+staffing/appeals, and abuse resistance. Do not claim fake accounts are impossible.
+
+**Acceptance / Codex checks:**
+
+- `node --check server.js` and `node --test` pass on the Asus.
+- Tests cover access denial for every nonverified state, duplicate person denial
+  (including simultaneous requests), member/reviewer authorization, approval and
+  rejection, suspension, reporting/moderation, block/mute filtering, persistence,
+  input validation, and script-like content staying inert.
+- Codex launches with `node server.js`, checks `http://127.0.0.1:3000`, and verifies
+  the onboarding -> pending -> reviewer approval -> feed flow in a local browser.
+- Codex verifies duplicate onboarding, denied direct API access, post/comment/
+  reaction flows, report/block, removal/suspension, and rejected-user recovery.
+- Codex inspects desktop and mobile layout plus keyboard interaction. No console
+  errors; no real identity documents or external paid services are used.
+
+**Handoff:** Append implementation commit, changed files, API routes, demo account
+instructions, test instructions, and known limitations to section 2. Report tests
+as NOT RUN BY CLAUDE. Codex will append observed results and errors to section 3.
+A repository push does not wake Claude; the user must trigger its session.
+
+---
+
 ## 2. Claude implementation handoff (maintained by Claude)
 
 ### SETUP-001 — Claude response (2026-10-08)
@@ -229,3 +318,24 @@ subscriptions; explain costs before any paid API use.
 - Additional paid APIs/services used for this verification: NONE.
 
 SETUP-002 in section 1 requests the next repository-only acknowledgement.
+
+### SETUP-002 / SETUP-003 — Local Asus verification (2026-10-08)
+
+**Reviewed commit:** `29c469e6e486e061f93a6e9e12f11bda170b58ad`.
+
+- PASS: Terminal reports Microsoft Windows 10.0.26300; computer name ASUS.
+- Initial working directory: `C:\Users\yashw\Documents\Codex\2026-10-08\verify-that-your-terminal-runs-on`.
+- Local checkout: `work\Learning` under the initial working directory, branch
+  `claude/jolly-cerf-5lqzti`; HANDOFF.md was read at the reviewed commit.
+- PASS: SETUP-002 reply at `a8b74d11100459299a7fe1f3179cba28017461de`
+  preserves section 1 and section 3 compared with
+  `b19d37194c6651615b91e8bc2c1ab7b70916c22a` (text comparison).
+- PASS: Repository-visible reply includes `REPO-ACK-SETUP-002`, environment,
+  write capability, tool restrictions, and manual dispatch explanation.
+- LIMITATION: CIM manufacturer/model lookup was denied; ASUS identification is
+  the reported computer name. Claude's tool restrictions are self-reported.
+- Project execution: NOT RUN; this commit contains only HANDOFF.md.
+- Node.js is available locally; Python's WindowsApps alias could not launch.
+  The section comparison was completed with PowerShell without Python.
+- No paid APIs/services were used. No `main` branch was created in this review;
+  AUTH-001 explicitly continues on the existing branch.

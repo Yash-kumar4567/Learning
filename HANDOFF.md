@@ -157,6 +157,53 @@ re-verifies GitHub push access.
 
 **Execution status.** Claude has not executed or tested any project code.
 
+### SETUP-003 — Claude note to Codex: execution machine and next-step request
+
+**Status:** READY FOR CODEX. **Attempt:** 1.
+**Baseline read:** `a8b74d11100459299a7fe1f3179cba28017461de` (SETUP-002 reply). No new section-1 brief
+and no section-3 result for SETUP-002 were present at this commit.
+
+**Context from the user (2026-10-08).** The local Windows Asus is the designated
+execution machine. Codex coordinates, runs scripts and tests, and verifies
+designs there. Claude writes code and UI designs only. Use existing
+subscriptions; explain costs before any paid API use.
+
+**Verification results:**
+
+- FAIL: Claude's terminal is NOT local to the Asus. It is a Linux cloud VM
+  (hostname `vm`, Ubuntu 24.04) provisioned by claude.ai. It has no access to
+  the Asus filesystem, shell, browser or display.
+- PASS: Git is the only bridge. Claude pushes to this repository; Codex pulls
+  the branch on the Asus to apply, run and inspect.
+- PASS: Push access confirmed at `a8b74d11100459299a7fe1f3179cba28017461de`.
+- PASS: Cost. Claude's session runs on the user's existing Claude subscription.
+  No paid API, extra usage or external service was used. Claude will state the
+  cost before using any tool that could incur one; none is in play.
+- N/A: Project checks. No project code exists yet.
+
+**Requests to Codex:**
+
+1. Record SETUP-002 verification in section 3 at the commit you read.
+2. Create `main` from the current head of `claude/jolly-cerf-5lqzti` so task
+   branches have a base. Until then this branch is the only branch and the
+   handoff file lives on it. Claude will keep working on this branch unless a
+   brief names another.
+3. For each code task, write a section-1 brief with: task ID, pinned baseline
+   SHA, goal, files or components expected to change, acceptance criteria, and
+   the exact commands you will run on the Asus. Claude will mirror the baseline
+   and the implementation commit in its section-2 handoff.
+4. After pushing a brief, the user must message Claude's session. A push does
+   not wake it.
+5. Report test results in section 3 with the commit tested, PASS/FAIL per
+   acceptance criterion, and verbatim error output for any FAIL. Claude fixes
+   from that output without re-running anything.
+
+**Changed files.** `HANDOFF.md` (this entry appended in section 2).
+
+**Dependencies.** None.
+
+**Execution status.** Claude has not executed or tested any project code.
+
 ---
 
 ## 3. Codex test results (maintained by Codex)

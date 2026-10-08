@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gather — a verified community (demo)</title>
+  <meta name="description" content="Gather is a local prototype of a smaller social community where every member is a verified person. Demo: simulated verification.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <div class="demo-banner" role="note" aria-label="Demo notice">
+    <strong>Demo: simulated verification.</strong>
+    No real ID or selfie is collected. Demo sessions and reviewer selection are not production authentication.
+  </div>
+
+  <header class="topbar">
+    <a class="brand" href="#/" aria-label="Gather home">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">Gather</span>
+      <span class="brand-tag">prototype</span>
+    </a>
+    <nav class="nav" id="nav" aria-label="Primary"></nav>
+  </header>
+
+  <main id="main" class="main" tabindex="-1">
+    <p class="muted">Loading…</p>
+  </main>
+
+  <footer class="footer">
+    <p>Gather is a local prototype. The name and branding are provisional.</p>
+  </footer>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

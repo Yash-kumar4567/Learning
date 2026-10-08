@@ -400,6 +400,7 @@
       items.push(link('#/', 'Home'), link('#/join', 'Join'), link('#/recover', 'Recover'), link('#/rules', 'Rules'), link('#/demo', 'Demo accounts'));
     } else {
       items.push(me.canAccessCommunity ? link('#/feed', 'Feed') : link('#/status', 'Your status'));
+      if (me.status !== 'suspended') items.push(link('#/profile', 'Profile'));
       items.push(link('#/rules', 'Rules'));
       if (me.isReviewer) items.push(link('#/reviewer', 'Reviewer'));
       items.push(link('#/demo', 'Demo accounts'));
@@ -480,6 +481,49 @@
           h('li', {}, h('span', {}, h('strong', {}, 'A reviewer decides. '), 'Approved members get the feed. Rejected requests get a reason and a way to resubmit or appeal.'))
         ),
         h('p', { class: 'faint' }, 'Testing tip: the Demo accounts page lets you act as the reviewer to approve yourself.')
+      ),
+      h(
+        'section',
+        { class: 'grid two', 'aria-label': 'What Gather promises and what it does not' },
+        h(
+          'div',
+          { class: 'card success' },
+          h('h3', {}, 'What we aim for'),
+          h(
+            'ul',
+            {},
+            h('li', {}, 'One active account per person, so reputation and accountability mean something.'),
+            h('li', {}, 'Rules that target behaviour, not opinions: harassment, threats, impersonation and spam are out; disagreement is in.'),
+            h('li', {}, 'Moderation by people. Every reviewer action is logged, and rejected requests can be resubmitted or appealed.'),
+            h('li', {}, 'Privacy by default. Verification details stay with reviewers and never appear on a profile.')
+          )
+        ),
+        h(
+          'div',
+          { class: 'card notice' },
+          h('h3', {}, 'What this prototype cannot promise'),
+          h(
+            'ul',
+            {},
+            h('li', {}, 'It does not verify anyone. The demo person identifier is a stand-in, and whoever types the same one is treated as the same person.'),
+            h('li', {}, 'Fake accounts are not impossible. Verification raises the cost of abuse; it does not eliminate it.'),
+            h('li', {}, 'Nothing detects negativity automatically. Reports are read by a person, and reasonable people will sometimes disagree with the outcome.'),
+            h('li', {}, 'Sessions and the demo account switcher are testing shortcuts, not real sign-in.')
+          )
+        )
+      ),
+      h(
+        'section',
+        { class: 'card', 'aria-labelledby': 'rules-title' },
+        h('h2', { id: 'rules-title' }, 'Rules, appeals and privacy, in short'),
+        h(
+          'div',
+          { class: 'grid three' },
+          h('div', {}, h('h3', {}, 'Respectful disagreement'), h('p', { class: 'muted' }, 'Say a take is wrong and why. Do not attack the person saying it. Reviewers are asked to leave disagreement alone.')),
+          h('div', {}, h('h3', {}, 'Appeals'), h('p', { class: 'muted' }, 'A rejected verification shows its reason and can be resubmitted with a note. A suspended member can send an appeal that reviewers see next to the suspension.')),
+          h('div', {}, h('h3', {}, 'Privacy'), h('p', { class: 'muted' }, 'Profiles show a name, a handle and a bio. The demo identifier is stored only as a hash and never shown, not even to reviewers.'))
+        ),
+        h('div', { class: 'btn-row' }, h('a', { class: 'btn', href: '#/rules' }, 'Read the full rules'))
       )
     );
   }
@@ -874,7 +918,9 @@
           { class: 'card danger' },
           h('h2', {}, 'Why it was not approved'),
           h('p', { class: 'prewrap' }, (decision && decision.reason) || 'No reason was recorded.'),
-          h('p', { class: 'faint' }, `Reviewed ${formatTimeText(decision && decision.at)}.`)
+          h('p', { class: 'faint' }, `Reviewed ${formatTimeText(decision && decision.at)}.`),
+          h('p', {}, 'If the reason mentions your name or handle, change them on your profile first, then resubmit below.'),
+          h('div', { class: 'btn-row' }, h('a', { class: 'btn', href: '#/profile' }, 'Edit name or handle'))
         ),
         verificationForm({
           heading: 'Resubmit or appeal',
@@ -886,12 +932,17 @@
     } else if (me.status === 'suspended') {
       body = h(
         'div',
-        { class: 'card danger' },
-        h('h2', {}, 'Account suspended'),
-        h('p', { class: 'prewrap' }, (me.suspension && me.suspension.reason) || 'No reason was recorded.'),
-        h('p', { class: 'faint' }, `Since ${formatTimeText(me.suspension && me.suspension.at)}.`),
-        h('p', {}, 'Community access is paused. A reviewer can reinstate the account. You can still read the rules.'),
-        h('div', { class: 'btn-row' }, h('a', { class: 'btn', href: '#/rules' }, 'Community rules'))
+        { class: 'stack' },
+        h(
+          'div',
+          { class: 'card danger' },
+          h('h2', {}, 'Account suspended'),
+          h('p', { class: 'prewrap' }, (me.suspension && me.suspension.reason) || 'No reason was recorded.'),
+          h('p', { class: 'faint' }, `Since ${formatTimeText(me.suspension && me.suspension.at)}.`),
+          h('p', {}, 'Community access is paused and your posts are hidden, not deleted. A reviewer can reinstate the account, after which everything reappears.'),
+          h('div', { class: 'btn-row' }, h('a', { class: 'btn', href: '#/rules' }, 'Community rules'))
+        ),
+        appealForm(me)
       );
     } else {
       body = h(
@@ -904,6 +955,159 @@
     }
 
     $main.replaceChildren(h('div', { class: 'narrow stack' }, head, body));
+  }
+
+  function appealForm(me) {
+    const existing = me.suspension && me.suspension.appeal;
+    const textarea = h('textarea', {
+      id: 'appeal-message',
+      name: 'message',
+      maxlength: 1000,
+      rows: 4,
+      placeholder: 'Explain what happened, what you understand about the rule involved, and what you will do differently.',
+    });
+    if (existing) textarea.value = existing.message;
+    const error = h('div', { class: 'callout error', role: 'alert', hidden: true });
+    const button = h('button', { type: 'submit', class: 'btn primary' }, existing ? 'Update appeal' : 'Send appeal');
+    return h(
+      'form',
+      {
+        class: 'card',
+        novalidate: true,
+        onSubmit: async (event) => {
+          event.preventDefault();
+          error.hidden = true;
+          const message = textarea.value.trim();
+          if (message.length < 10) {
+            error.textContent = 'Write at least ten characters so a reviewer has something to go on.';
+            error.hidden = false;
+            textarea.focus();
+            return;
+          }
+          button.disabled = true;
+          try {
+            const data = await api('POST', '/api/suspension/appeal', { message });
+            app.me = data.account;
+            toast('Appeal sent. A reviewer will see it next to your suspension.', 'success');
+            render();
+          } catch (err) {
+            error.textContent = err.message;
+            error.hidden = false;
+          } finally {
+            button.disabled = false;
+          }
+        },
+      },
+      h('h2', {}, existing ? 'Your appeal' : 'Appeal this suspension'),
+      existing
+        ? h('p', { class: 'faint' }, `Sent ${formatTimeText(existing.at)}. You can update it until a reviewer decides.`)
+        : h('p', { class: 'muted' }, 'Reviewers read appeals by hand. There is no deadline in this prototype, and sending one does not guarantee reinstatement.'),
+      h('div', { class: 'field' }, h('label', { for: 'appeal-message' }, 'Message to the reviewers'), textarea),
+      error,
+      h('div', { class: 'btn-row' }, button)
+    );
+  }
+
+  async function viewProfile() {
+    if (!app.me) {
+      $main.replaceChildren(signedOutCard('Your profile', 'Sign in to edit your name, handle and bio.'));
+      return;
+    }
+    await refreshMe();
+    const me = app.me;
+    if (!me) {
+      $main.replaceChildren(signedOutCard('Your profile', 'Your session has ended. Sign in again.'));
+      return;
+    }
+    if (me.status === 'suspended') {
+      navigate('/status');
+      return;
+    }
+    const displayName = textField({ name: 'displayName', label: 'Display name', hint: '2 to 40 characters.', maxlength: 40, autocomplete: 'nickname' });
+    const handle = textField({ name: 'handle', label: 'Handle', hint: 'Lowercase letters, numbers and underscores, 3 to 20 characters. Changing it is allowed; people will see the new one everywhere.', maxlength: 20, autocapitalize: 'none' });
+    const bioId = 'field-bio';
+    const bio = h('textarea', { id: bioId, name: 'bio', maxlength: 200, rows: 3, placeholder: 'A sentence or two. Optional.' });
+    const bioCounter = h('div', { class: 'counter', id: `${bioId}-count` }, `${(me.bio || '').length} / 200`);
+    bio.addEventListener('input', () => {
+      bioCounter.textContent = `${bio.value.length} / 200`;
+    });
+    displayName.input.value = me.displayName;
+    handle.input.value = me.handle;
+    bio.value = me.bio || '';
+    const formError = h('div', { class: 'callout error', role: 'alert', hidden: true });
+    const button = h('button', { type: 'submit', class: 'btn primary' }, 'Save changes');
+
+    const form = h(
+      'form',
+      {
+        class: 'card',
+        novalidate: true,
+        onSubmit: async (event) => {
+          event.preventDefault();
+          formError.hidden = true;
+          const values = {
+            displayName: displayName.input.value.trim(),
+            handle: handle.input.value.trim().replace(/^@/, '').toLowerCase(),
+            bio: bio.value.trim(),
+          };
+          let firstInvalid = null;
+          const check = (field, ok, message) => {
+            field.setError(ok ? '' : message);
+            if (!ok && !firstInvalid) firstInvalid = field;
+          };
+          check(displayName, values.displayName.length >= 2 && values.displayName.length <= 40, 'Use 2 to 40 characters.');
+          check(handle, /^[a-z0-9_]{3,20}$/.test(values.handle), 'Use 3 to 20 lowercase letters, numbers or underscores.');
+          if (firstInvalid) {
+            firstInvalid.input.focus();
+            return;
+          }
+          const changes = {};
+          if (values.displayName !== me.displayName) changes.displayName = values.displayName;
+          if (values.handle !== me.handle) changes.handle = values.handle;
+          if (values.bio !== (me.bio || '')) changes.bio = values.bio;
+          if (!Object.keys(changes).length) {
+            toast('Nothing changed.');
+            return;
+          }
+          button.disabled = true;
+          try {
+            const data = await api('PATCH', '/api/me/profile', changes);
+            app.me = data.account;
+            toast('Profile saved.', 'success');
+            navigate(app.me.canAccessCommunity ? '/feed' : '/status');
+          } catch (err) {
+            if (err.data && err.data.field === 'handle') {
+              handle.setError(err.message);
+              handle.input.focus();
+            } else if (err.data && err.data.field === 'displayName') {
+              displayName.setError(err.message);
+              displayName.input.focus();
+            } else {
+              formError.textContent = err.message;
+              formError.hidden = false;
+            }
+          } finally {
+            button.disabled = false;
+          }
+        },
+      },
+      h('h1', {}, 'Your profile'),
+      h('p', { class: 'muted' }, 'This is what other members see. Your verification status and the demo identifier are not part of it and cannot be changed here.'),
+      displayName.wrap,
+      handle.wrap,
+      h('div', { class: 'field' }, h('label', { for: bioId }, 'Bio'), bio, bioCounter),
+      formError,
+      h('div', { class: 'btn-row' }, button, h('a', { class: 'btn quiet', href: me.canAccessCommunity ? '#/feed' : '#/status' }, 'Cancel'))
+    );
+
+    $main.replaceChildren(
+      h(
+        'div',
+        { class: 'narrow stack' },
+        h('div', { class: 'card sunken' }, h('div', { class: 'row between' }, identity(me), statusBadge(me.status))),
+        form
+      )
+    );
   }
 
   // ---------------------------------------------------------------------
@@ -1083,7 +1287,24 @@
     return form;
   }
 
-  function commentRow(comment, reload) {
+  async function deleteOwn(kind, route, reload) {
+    const ok = await confirmDialog({
+      title: `Delete your ${kind}?`,
+      message: 'It disappears from the feed for everyone. Reviewers can still see that it existed if it was reported.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api('DELETE', route);
+      toast(`${kind === 'post' ? 'Post' : 'Comment'} deleted.`, 'success');
+      await reload();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
+  function commentRow(comment, reload, post) {
     const mine = app.me && comment.author.id === app.me.id;
     return h(
       'div',
@@ -1101,7 +1322,9 @@
           h('span', { class: 'faint' }, formatTime(comment.createdAt))
         ),
         h('p', { class: 'comment-body prewrap' }, comment.body),
-        mine ? null : h('button', { type: 'button', class: 'btn small quiet', onClick: () => reportTarget('comment', comment.id, `comment by @${comment.author.handle}`) }, 'Report')
+        mine
+          ? h('button', { type: 'button', class: 'btn small quiet', onClick: () => deleteOwn('comment', `/api/posts/${encodeURIComponent(post.id)}/comments/${encodeURIComponent(comment.id)}`, reload) }, 'Delete')
+          : h('button', { type: 'button', class: 'btn small quiet', onClick: () => reportTarget('comment', comment.id, `comment by @${comment.author.handle}`) }, 'Report')
       )
     );
   }
@@ -1114,7 +1337,7 @@
         commentsWrap.replaceChildren(heading, h('p', { class: 'faint' }, 'No comments yet.'));
         return;
       }
-      commentsWrap.replaceChildren(heading, comments.map((c) => commentRow(c, reload)));
+      commentsWrap.replaceChildren(heading, comments.map((c) => commentRow(c, reload, post)));
     };
 
     const reactionBar = h('div', { class: 'post-actions', role: 'group', 'aria-label': 'Reactions' });
@@ -1179,7 +1402,9 @@
         'div',
         { class: 'row' },
         toggle,
-        post.isOwn ? h('span', { class: 'faint' }, 'Your post') : h('button', { type: 'button', class: 'btn small quiet', onClick: () => reportTarget('post', post.id, `post by @${post.author.handle}`) }, 'Report')
+        post.isOwn
+          ? [h('span', { class: 'faint' }, 'Your post'), h('button', { type: 'button', class: 'btn small quiet', onClick: () => deleteOwn('post', `/api/posts/${encodeURIComponent(post.id)}`, reload) }, 'Delete')]
+          : h('button', { type: 'button', class: 'btn small quiet', onClick: () => reportTarget('post', post.id, `post by @${post.author.handle}`) }, 'Report')
       ),
       form,
       commentsWrap
@@ -1324,7 +1549,8 @@
         { class: 'card' },
         h('h3', {}, 'You'),
         identity(me),
-        h('p', { class: 'faint' }, 'Your profile shows your name, handle and bio. Verification details stay private.')
+        h('p', { class: 'faint' }, 'Your profile shows your name, handle and bio. Verification details stay private.'),
+        h('div', { class: 'row' }, h('a', { class: 'btn small', href: '#/profile' }, 'Edit profile'), h('a', { class: 'btn small quiet', href: '#/status' }, 'Account status'))
       );
       const rules = h(
         'div',
@@ -1435,7 +1661,8 @@
         'div',
         {},
         h('div', { class: 'row' }, h('span', { class: 'faint' }, `${target.type} by`), target.author ? identity(target.author) : null, target.authorStatus ? statusBadge(target.authorStatus) : null),
-        h('div', { class: `quote prewrap ${target.removed ? 'removed' : ''}`.trim() }, target.body)
+        h('div', { class: `quote prewrap ${target.removed ? 'removed' : ''}`.trim() }, target.body),
+        target.removed ? h('p', { class: 'faint' }, target.removedBy === 'author' ? 'Removed by its author.' : 'Removed by a reviewer.') : null
       );
     }
 
@@ -1587,6 +1814,19 @@
           'Suspend'
         );
       }
+      const notes = [];
+      if (m.status === 'suspended' && m.suspension) {
+        notes.push(h('div', { class: 'small prewrap' }, h('strong', {}, 'Suspended: '), m.suspension.reason));
+        if (m.suspension.appeal) {
+          notes.push(h('div', { class: 'quote prewrap small' }, h('strong', {}, `Appeal (${formatTimeText(m.suspension.appeal.at)}): `), m.suspension.appeal.message));
+        }
+      }
+      if (m.status === 'rejected' && m.verification.lastDecision) {
+        notes.push(h('div', { class: 'small prewrap faint' }, h('strong', {}, 'Rejected: '), m.verification.lastDecision.reason));
+      }
+      if (m.hiddenPostCount) {
+        notes.push(h('div', { class: 'faint small' }, `${m.hiddenPostCount} hidden post${m.hiddenPostCount === 1 ? '' : 's'}`));
+      }
       return h(
         'tr',
         {},
@@ -1594,6 +1834,7 @@
         h('td', {}, statusBadge(m.status)),
         h('td', {}, m.role === 'reviewer' ? reviewerBadge() : h('span', { class: 'faint' }, 'Member')),
         h('td', {}, String(m.postCount)),
+        h('td', { class: 'notes-cell' }, notes.length ? notes : h('span', { class: 'faint' }, '')),
         h('td', {}, action)
       );
     });
@@ -1604,7 +1845,7 @@
         'table',
         {},
         h('caption', { class: 'sr-only' }, 'All accounts'),
-        h('thead', {}, h('tr', {}, h('th', { scope: 'col' }, 'Member'), h('th', { scope: 'col' }, 'Status'), h('th', { scope: 'col' }, 'Role'), h('th', { scope: 'col' }, 'Posts'), h('th', { scope: 'col' }, 'Action'))),
+        h('thead', {}, h('tr', {}, h('th', { scope: 'col' }, 'Member'), h('th', { scope: 'col' }, 'Status'), h('th', { scope: 'col' }, 'Role'), h('th', { scope: 'col' }, 'Posts'), h('th', { scope: 'col' }, 'Notes and appeals'), h('th', { scope: 'col' }, 'Action'))),
         h('tbody', {}, rows)
       )
     );
@@ -1674,7 +1915,7 @@
       const labels = {
         queue: `Queue (${data.queue.length})`,
         reports: `Reports (${data.reports.open.length})`,
-        members: `Members (${data.members.length})`,
+        members: `Members (${data.members.length})${data.counts.appeals ? ` · ${data.counts.appeals} appeal${data.counts.appeals === 1 ? '' : 's'}` : ''}`,
         history: 'History',
       };
       const panels = {
@@ -1735,7 +1976,7 @@
           { class: 'callout warn' },
           h('span', {}, h('strong', {}, 'Demo reviewer. '), 'Selecting this account from Demo accounts is not production authentication, but every action below is authorised on the server and logged in History.')
         ),
-        h('div', { class: 'stats' }, stat(data.counts.pending, 'Pending requests'), stat(data.counts.openReports, 'Open reports'), stat(data.counts.members, 'Accounts')),
+        h('div', { class: 'stats' }, stat(data.counts.pending, 'Pending requests'), stat(data.counts.openReports, 'Open reports'), stat(data.counts.appeals || 0, 'Suspension appeals'), stat(data.counts.members, 'Accounts')),
         tabs,
         panel
       );
@@ -1760,6 +2001,7 @@
     '/join': viewJoin,
     '/recover': viewRecover,
     '/status': viewStatus,
+    '/profile': viewProfile,
     '/feed': viewFeed,
     '/rules': viewRules,
     '/reviewer': viewReviewer,

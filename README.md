@@ -68,10 +68,15 @@ after themselves. They cover:
 - member vs reviewer authorisation, self-assignment of status or role, and
   demo-login restrictions;
 - submit, approve, reject with reason, resubmit or appeal, suspend, reinstate;
+- suspension appeals, their visibility to reviewers, and demo session expiry;
+- profile editing (name, handle, bio) with validation, handle uniqueness, and
+  proof that it cannot touch status, role or identity;
+- authors deleting their own posts and comments, and nobody else's;
 - reporting, report resolution (dismiss, remove content, suspend), direct
   content removal and the action history;
 - block and mute filtering of posts and comments, in both directions for blocks;
-- persistence across a server restart;
+- persistence across a server restart, atomic writes, and recovery from a
+  corrupt state file;
 - JSON validation, body size limits, field validation, control characters, and
   script-like content staying inert.
 
@@ -113,7 +118,15 @@ trigger the duplicate-person rule.
 6. **Moderation.** As `imani`, open *Reviewer*: dismiss or act on reports,
    remove content, suspend and reinstate members, and read the history.
 7. **Rejected-user recovery.** As `rowan`, read the rejection reason on the
-   status page and resubmit with an appeal note. It reappears in the queue.
+   status page, open *Profile* to change the handle the reviewer objected to,
+   then resubmit with an appeal note. It reappears in the queue.
+8. **Suspension appeal.** As `dex`, read the suspension reason and send an
+   appeal from the status page. As `imani`, open *Reviewer → Members*: the
+   appeal shows next to the suspension, and *Reinstate* clears it.
+9. **Your own content.** As any verified member, edit your name, handle or bio
+   from *Profile*, and delete one of your own posts or comments from the feed.
+   Deleted content is hidden, not erased; a reviewer reading a report on it is
+   told it was removed by its author.
 
 ## How it is built
 
@@ -155,9 +168,17 @@ real people to real identities is outside this prototype.
 
 A session is a random token stored on the server and sent as an `HttpOnly`
 cookie (`gather_session`) or as `Authorization: Bearer <token>`. Tokens are
-returned in JSON so tests can use them. Seeded accounts can be selected through
-`POST /api/auth/demo-login`; accounts created through onboarding cannot, and
-must use recovery instead. All of this is labelled insecure in the UI.
+returned in JSON so tests can use them and expire after 30 days. Seeded
+accounts can be selected through `POST /api/auth/demo-login`; accounts created
+through onboarding cannot, and must use recovery instead. All of this is
+labelled insecure in the UI.
+
+### Content removal
+
+Nothing is erased. A post or comment removed by a reviewer, or deleted by its
+author, is marked removed and hidden from every feed; the record stays so that
+reports and the action history still make sense. Content from a suspended
+member is hidden while the suspension lasts and reappears on reinstatement.
 
 ## API
 
@@ -175,10 +196,14 @@ All routes return JSON. Errors look like
 | POST | `/api/onboarding/register` | anyone | `{ displayName, handle, personId }` → unverified account + session; `409` on duplicate person or handle |
 | POST | `/api/auth/recover` | anyone | `{ personId }` → session for the existing account |
 | POST | `/api/verification/submit` | signed in | `{ consent: true, note? }` from `unverified` or `rejected` → `pending` |
+| PATCH | `/api/me/profile` | signed in, not suspended | any of `{ displayName, handle, bio }`; nothing else can change |
+| POST | `/api/suspension/appeal` | suspended | `{ message }` (10–1000 chars); shown to reviewers, cleared on reinstatement |
 | GET | `/api/feed` | verified | posts visible to the viewer |
 | POST | `/api/posts` | verified | `{ body }` |
 | POST | `/api/posts/:postId/comments` | verified | `{ body }` |
 | POST | `/api/posts/:postId/reactions` | verified | `{ type }` toggles `appreciate`, `insightful` or `support` |
+| DELETE | `/api/posts/:postId` | verified, author only | hides your own post |
+| DELETE | `/api/posts/:postId/comments/:commentId` | verified, author only | hides your own comment |
 | GET | `/api/members/:memberId` | verified | public profile + viewer relationship |
 | POST | `/api/members/:memberId/block` `/unblock` `/mute` `/unmute` | verified | relationship changes |
 | POST | `/api/reports` | verified | `{ targetType: post\|comment\|member, targetId, reason, details? }` |
@@ -197,8 +222,8 @@ status or role.
 
 Limits: JSON bodies up to 32 KB; display names 2–40 characters; handles
 `[a-z0-9_]{3,20}`; identifiers `[A-Za-z0-9-]{4,64}`; posts 1–1000 characters;
-comments 1–500; reasons 3–300; notes and details up to 500. Control characters
-are rejected.
+comments 1–500; reasons 3–300; notes and details up to 500; bios up to 200;
+appeals 10–1000. Control characters are rejected.
 
 ## Security notes
 
@@ -241,10 +266,14 @@ could be used for real, at least the following are missing:
 
 Other limitations of the prototype itself:
 
-- Posts cannot be edited or deleted by their authors.
+- Posts and comments can be deleted by their authors but not edited.
 - Content from suspended members is hidden rather than deleted; reinstating
   the member brings it back.
 - Comments by blocked or muted members are hidden only for the viewer; blocks
   hide content in both directions, mutes in one.
 - There is no notification system; a pending user has to refresh the status
-  page or sign back in after approval.
+  page or sign back in after approval, and a suspended member is not told when
+  an appeal is read.
+- Appeals have no deadline and no second-reviewer requirement.
+- A corrupt `state.json` is moved aside (`state.json.corrupt-<timestamp>.json`)
+  and the app reseeds; nothing is merged back automatically.

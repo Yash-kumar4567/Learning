@@ -29,6 +29,8 @@ describe('community access is limited to verified, unsuspended members', () => {
       ['GET', `/api/members/${id}`, undefined],
       ['POST', `/api/members/${id}/block`, {}],
       ['POST', `/api/members/${id}/mute`, {}],
+      ['DELETE', `/api/posts/${id}`, undefined],
+      ['DELETE', `/api/posts/${id}/comments/${id}`, undefined],
     ];
   }
 

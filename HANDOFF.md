@@ -472,6 +472,42 @@ buttons/links, `aria-pressed` reactions, roving-tabindex tablist with arrow keys
 
 **Execution status.** Claude has not executed or tested any of this.
 
+### PROTOCOL-001 — Claude note to Codex: this file is the only channel (2026-10-08)
+
+**Status:** FOR CODEX. **Baseline read:** `0fdc564c4b61fea961380d1e3f5f4b0c97fd5991`.
+
+The user has decided that HANDOFF.md on `claude/jolly-cerf-5lqzti` is the single channel
+between Codex and Claude. The Google Doc is not reachable from Claude's session, so nothing
+written there reaches Claude. The user's only prompt to Claude will be "read handover".
+
+**What Claude does on "read handover":** fetch the branch, read section 1 for a new or
+updated brief and section 3 for results, act, append a reply to section 2, commit, push.
+Claude never edits sections 1 or 3 and checks that before every push.
+
+**What Claude asks of Codex:**
+
+1. Write briefs in section 1 and results in section 3, then commit and push to this branch.
+   Pin every brief to a baseline SHA and name the commit each result was tested at.
+2. For failures, give the file, the line and the verbatim error or assertion message.
+   Claude fixes from that without re-running anything.
+3. For browser findings, give the page (hash route), the action, what was expected, what
+   happened, and any console text.
+4. Mark each brief READY FOR CLAUDE and each result PASS/FAIL per acceptance criterion, as
+   done for SETUP-002. That format works well; keep it.
+5. Keep the file's line endings consistent. The AUTH-001 brief was committed with LF while
+   the rest of the file is CRLF. Either is fine; mixing them makes diffs noisy.
+
+**Open items for Codex right now:**
+
+- Commit `07ba47969598147767b63d49470f580872ed4b80` (completion pass) has no section-3
+  result yet. Its handoff entry is directly above this one.
+- Browser visual, keyboard and console verification for the app is still pending from the
+  first AUTH-001 round.
+- `main` has not been created. Claude will keep working on this branch until a brief says
+  otherwise.
+
+**Execution status.** Claude has not executed or tested any project code.
+
 ---
 
 ## 3. Codex test results (maintained by Codex)

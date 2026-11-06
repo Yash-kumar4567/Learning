@@ -574,6 +574,16 @@ def cmd_probe(tv: Tv, args) -> int:
     return 0
 
 
+def connection_flags(args) -> str:
+    """The flags needed to reach this TV again, for hints printed to the user."""
+    flags = f"--host {args.host}"
+    if args.adb:
+        flags = f"--adb {args.adb} " + flags
+    if args.port != 5555 or args.adb:
+        flags += f" --port {args.port}"
+    return flags
+
+
 def cmd_scan(tv: Tv, args) -> int:
     info = tv.probe()
     states = tv.package_states()
@@ -593,7 +603,7 @@ def cmd_scan(tv: Tv, args) -> int:
     for key in ("recommended", "optional", "vendor", "google", "unknown", "yours", "core", "protected", "disabled"):
         if key in counts:
             print(f"  {key:<12} {counts[key]}")
-    print(f"\nPlan written to {out}. Open it, keep or remove lines, then run:\n  python3 tidytv.py --host {args.host} apply {out}")
+    print(f"\nPlan written to {out}. Open it, keep or remove lines, then run:\n  python3 tidytv.py {connection_flags(args)} apply {out}")
     if info["home"] == "com.google.android.apps.tv.launcherx":
         print("\nThe sponsored rows on the home screen come from the stock launcher itself. To lose them, install another launcher\n(Projectivy Launcher or FLauncher from the Play Store), then uncomment its line in the plan and apply again.")
     return 0

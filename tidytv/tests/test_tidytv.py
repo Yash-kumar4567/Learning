@@ -416,6 +416,14 @@ class CommandTests(unittest.TestCase):
         self.assertNotRegex(plan, r"(?m)^com\.android\.vending")
         self.assertEqual(tidytv.parse_list(plan), ["com.google.android.feedback"])
         self.assertIn("install another launcher", out)
+        self.assertIn(f"--host 127.0.0.1 --port {fake.port} apply plan.txt", out)
+
+    def test_connection_flags_keep_adb_and_port(self):
+        import argparse
+        args = argparse.Namespace(host="10.0.0.5", port=39553, adb="adb")
+        self.assertEqual(tidytv.connection_flags(args), "--adb adb --host 10.0.0.5 --port 39553")
+        args = argparse.Namespace(host="10.0.0.5", port=5555, adb=None)
+        self.assertEqual(tidytv.connection_flags(args), "--host 10.0.0.5")
 
     def test_apply_dry_run_changes_nothing(self):
         self.seed_key()

@@ -524,6 +524,64 @@ No implementation change in this commit. Claude will act next on either of:
 
 **Execution status.** Claude has not executed or tested any project code.
 
+### TIDY-001 — Claude handoff: tidytv, a TV-stick cleaner (2026-11-06)
+
+**Status:** READY FOR CODEX. **Attempt:** 1. **Origin:** user request in chat (no section-1 brief).
+**Baseline read:** `678c88fa85a44055433e57e33ed731d1868ce09a`.
+**Implementation commit:** `dc5724b78e417f9e9519f85d9e1ac459201466da` on `claude/jolly-cerf-5lqzti`.
+**Tests:** NOT RUN BY CLAUDE. Claude did not run code, tests, builds or previews.
+
+**What the user asked.** Build a tool like "Clean My TV" (the desktop app wingedpanther/cleanmytv,
+built on the Gathin23/cleanyourtv lists) for a Realme 4K Smart Google TV Stick, usable from an iPad
+on the same Wi-Fi. Claude's session cannot reach the user's Wi-Fi; the Asus can, and so can the iPad.
+
+**What was built.** `tidytv/`, separate from the Gather app:
+
+- `tidytv/tidytv.py` — one file, standard library only, Python 3.8+. Implements the ADB network
+  protocol (CNXN/AUTH/OPEN/WRTE/OKAY/CLSE) and RSA host authentication (key generation, PKCS#1 v1.5
+  token signing, Android public-key encoding) itself, so no adb install is needed. Commands:
+  `probe`, `scan` (writes an editable `plan.txt`), `apply` (backup, `pm disable-user --user 0`,
+  verify, Home protection and handover), `restore`, `check [--fix]`, `shell`, `close` (turns ADB off
+  and checks the port), `port`. `--adb <path>` drives a real adb instead, for sticks that need
+  Wireless-debugging pairing (TLS), which the built-in client detects and explains.
+- `tidytv/lists/google-tv-stick.txt` — conservative list derived from the 84 Google TV lists in
+  cleanyourtv (MIT); vendor packages are never auto-disabled.
+- `tidytv/tests/test_tidytv.py` — unittest suite with a fake ADB device on loopback: wire format,
+  RSA (512-bit keys for speed), handshake with and without auth including first-time key offer,
+  STLS detection, big output, classification, Home protection, apply/backup/check/restore.
+- `tidytv/README.md` — iPad (a-Shell, iSH), Windows, walkthrough, pairing, safety, limitations.
+
+**Suggested commands on the Asus (PowerShell).** Python 3 is required and was reported absent
+("WindowsApps alias could not launch"); install it from python.org with *Add to PATH*, then:
+
+```
+cd tidytv
+python -m py_compile tidytv.py tests\test_tidytv.py
+python -m unittest discover -s tests -v
+```
+
+Then, because the Asus is on the same Wi-Fi as the stick, the real test (this is the one that matters):
+
+```
+python tidytv.py --host <stick ip> port
+python tidytv.py --host <stick ip> probe        # accept "Allow USB debugging?" on the TV
+python tidytv.py --host <stick ip> scan
+python tidytv.py --host <stick ip> apply plan.txt --dry-run
+```
+
+Stop at the dry run unless the user says to go further. Report the probe output (model, Android,
+Home owner), the scan counts, and the top of `plan.txt`. If `port` says refused and the stick
+offers only Wireless debugging with a pairing code, report that: it decides whether the iPad route
+needs iSH's `android-tools` for a one-time `adb pair` + `adb tcpip 5555`.
+
+**Risks and what is most likely to fail first.** The ADB client and RSA code are unexecuted; a
+mistake there shows up in the fake-device tests before any TV is touched. If the real stick
+answers AUTH differently from the fake (for example a second TOKEN after accepting the key), the
+state machine signs again; report the exact sequence if `probe` hangs or errors. 2048-bit key
+generation is pure Python and may take 5–30 s on first run.
+
+**Execution status.** Claude has not executed or tested any of this.
+
 ---
 
 ## 3. Codex test results (maintained by Codex)

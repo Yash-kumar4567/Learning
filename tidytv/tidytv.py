@@ -654,11 +654,11 @@ def cmd_apply(tv: Tv, args) -> int:
                 break
     print(f"\nDone. {len(decision['disable']) - len(not_disabled)} disabled, {len(not_disabled)} still enabled. Home is now {new_home or 'unknown'}.")
     if home and (not new_home or new_home in NOT_A_LAUNCHER):
-        print("WARNING: no launcher answers Home. Run restore now:  python3 tidytv.py --host <tv ip> restore")
+        print(f"WARNING: no launcher answers Home. Run restore now:\n  python3 tidytv.py {connection_flags(args)} restore")
         return 2
     if not_disabled:
         print("Still enabled (the firmware protects them): " + ", ".join(not_disabled))
-    print("Restart the TV once, then check that everything you use still works. Undo with: tidytv.py restore")
+    print(f"Restart the TV once, then check that everything you use still works. Undo with:\n  python3 tidytv.py {connection_flags(args)} restore")
     return 1 if failed else 0
 
 
@@ -793,7 +793,7 @@ def main(argv: list[str] | None = None) -> int:
             transport = AdbTcpTransport(args.host, args.port, key=load_or_create_key(), timeout=args.timeout)
         banner = transport.connect()
         props = dict(kv.split("=", 1) for kv in banner.split("::", 1)[-1].split(";") if "=" in kv) if "::" in banner else {}
-        print(f"Connected to {props.get('ro.product.model') or banner.strip()}.")
+        print(f"Connected to {props.get('ro.product.model') or f'{args.host}:{args.port}'}.")
         tv = Tv(transport)
         handler = {"probe": cmd_probe, "scan": cmd_scan, "apply": cmd_apply, "restore": cmd_restore, "check": cmd_check, "shell": cmd_shell, "close": cmd_close}[args.cmd]
         try:

@@ -1,0 +1,8 @@
+# tidytv list, step 2: swap the Google TV home screen for Projectivy Launcher.
+# Install Projectivy Launcher (com.spocky.projengmenu) from the Play Store and open it once FIRST.
+# tidytv refuses to disable the stock home while no other launcher is installed, and hands Home
+# to Projectivy if the setup wizard tries to take it.
+# Undo with `restore`; that brings the Google TV home and its recommendations back.
+
+com.google.android.apps.tv.launcherx               # stock Google TV home: sponsored rows, trailers, heavy on memory
+com.google.android.tungsten.setupwraith            # setup wizard: grabs Home when the stock home goes, nags "finish setting up"

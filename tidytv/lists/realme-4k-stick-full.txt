@@ -1,0 +1,69 @@
+# tidytv list: realme 4K Smart Google TV Stick (SkyworthDigital YYT, Amlogic, Google TV 14, ~2 GB RAM).
+# Owner uses only Netflix, Hotstar, YouTube and Prime Video. Everything else that is safe to switch
+# off is switched off. Based on the community list tested on the same hardware:
+# github.com/Gathin23/cleanyourtv/examples/skyworth-4k-google-tv-stick (MIT), plus the owner's choices.
+#
+# DISABLED for the main user, never uninstalled. Undo everything with `restore`, or one package with:
+#   adb shell pm enable --user 0 <package>
+# Packages not present on a given stick are skipped automatically.
+#
+# Kept on purpose (not in this list): Netflix (com.netflix.ninja), Prime Video
+# (com.amazon.amazonvideo.livingroom), Hotstar (in.startv.hotstar), YouTube (com.google.android.youtube.tv),
+# Play Store, Play services, keyboard, remote and Bluetooth, Wi-Fi, settings, firmware updates (com.sdt.ota),
+# Chromecast built-in (com.google.android.apps.mediashell), and the home screen until step 2.
+
+# --- Google setup, ads and telemetry (some already off from the first run)
+com.google.android.partnersetup
+com.google.android.onetimeinitializer
+com.google.android.feedback
+com.android.tv.feedbackconsent
+com.android.adservices.api
+com.android.ondevicepersonalization.services
+com.android.federatedcompute.services
+android.autoinstalls.config.AMLSTBAndroid.device   # auto-installs partner apps
+android.autoinstalls.config.google.gtvpai          # auto-installs sponsored apps
+com.google.android.tv.bugreportsender
+
+# --- Apps the owner never uses
+com.google.android.play.games                      # Play Games
+com.google.android.youtube.tvmusic                 # YouTube Music
+com.google.android.videos                          # Google TV Movies & TV
+com.google.android.katniss                         # Google Assistant / voice search: frees a lot of memory, but the mic button stops working
+com.google.android.marvin.talkback                 # TalkBack screen reader
+
+# --- Screensavers and ambient art (the screen simply sleeps on its timer instead)
+com.google.android.apps.tv.dreamx
+com.android.dreams.basic
+com.google.android.tv.axel
+
+# --- Vendor (Skyworth Digital / Amlogic) test, log and customisation apps
+com.sdt.producttest
+com.sdt.deviceinfo
+com.sdt.customization
+com.oemservice
+com.oem.qa
+com.amlogic.voicesubtitle
+
+# --- Phone and tablet features a TV stick does not use
+com.android.virtualmachine.res
+com.android.nearby.halfsheet
+com.android.uwb.resources
+com.android.managedprovisioning
+com.android.companiondevicemanager
+com.android.dynsystem
+com.android.hotspot2.osulogin
+com.android.cameraextensions
+com.android.printspooler
+com.android.healthconnect.controller
+com.android.health.connect.backuprestore
+
+# --- Backups, sync and small utilities
+com.android.sharedstoragebackup
+com.android.wallpaperbackup
+com.android.backupconfirm
+com.android.providers.userdictionary
+com.android.mtp
+com.android.settings.intelligence
+com.android.providers.calendar
+com.android.providers.contacts
+com.google.android.syncadapters.calendar

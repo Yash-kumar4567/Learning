@@ -337,6 +337,16 @@ class PlanningTests(unittest.TestCase):
         self.assertEqual(d["disable"], ["com.a"])
         self.assertIn("owns the Home screen", dict(d["skip"])[home])
 
+    def test_setup_wizard_is_held_back_with_the_home_swap(self):
+        home = "com.google.android.apps.tv.launcherx"
+        states = dict(self.states)
+        states["all"] = states["all"] + ["com.google.android.tungsten.setupwraith"]
+        d = tidytv.plan_apply([home, "com.google.android.tungsten.setupwraith"], states, home, [home, "com.google.android.tungsten.setupwraith"])
+        self.assertEqual(d["disable"], [])
+        self.assertIn("same run", dict(d["skip"])["com.google.android.tungsten.setupwraith"])
+        d = tidytv.plan_apply([home, "com.google.android.tungsten.setupwraith"], states, home, [home, "com.spocky.projengmenu"])
+        self.assertEqual(d["disable"], [home, "com.google.android.tungsten.setupwraith"])
+
     def test_home_owner_can_go_when_another_launcher_exists(self):
         home = "com.google.android.apps.tv.launcherx"
         d = tidytv.plan_apply([home], self.states, home, [home, "com.spocky.projengmenu"])

@@ -557,6 +557,13 @@ def plan_apply(packages: list[str], states: dict, home: str, home_candidates: li
             decision["skip"].append((package, "it owns the Home screen and no other launcher is installed; install one first (or --force-home)"))
         else:
             decision["disable"].append(package)
+    # The setup wizard only belongs in a list together with the home-screen swap. If the swap was held
+    # back, hold the wizard back too, so a launcher step is all or nothing.
+    home_held = any(p == home for p, _ in decision["skip"])
+    if home_held:
+        for package in [p for p in decision["disable"] if p in NOT_A_LAUNCHER]:
+            decision["disable"].remove(package)
+            decision["skip"].append((package, "kept until the home screen can be swapped in the same run"))
     return decision
 
 

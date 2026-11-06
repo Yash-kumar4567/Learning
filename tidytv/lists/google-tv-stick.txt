@@ -1,0 +1,37 @@
+# tidytv list: Google TV / Android TV streaming sticks (Realme 4K Smart Google TV Stick and similar
+# Amlogic/SkyworthDigital sticks running Google TV). Derived from what the community lists in
+# github.com/Gathin23/cleanyourtv disable on 84 Google TV devices (MIT). Use `scan` for a plan
+# tailored to your exact stick; this file is the conservative, known-safe subset.
+#
+# One package per line. Lines without '#' are DISABLED for the main user, never uninstalled.
+# Apply:  python3 tidytv.py --host <tv ip> apply lists/google-tv-stick.txt
+# Undo:   python3 tidytv.py --host <tv ip> restore
+
+# --- Telemetry, feedback, ad plumbing, feeders
+com.google.android.feedback                      # Google feedback and crash reporting
+com.android.tv.feedbackconsent                   # feedback consent prompts
+com.google.android.partnersetup                  # partner setup: OEM/partner customisation pushes
+android.autoinstalls.config.google.gtvpai        # auto-installs sponsored apps after setup
+com.android.adservices.api                       # Privacy Sandbox ad services
+com.android.federatedcompute.services            # federated compute (on-device personalisation)
+com.android.ondevicepersonalization.services     # on-device personalisation (ads)
+com.google.android.apps.tv.dreamx                # ambient screensaver with promo content
+com.google.android.onetimeinitializer            # nothing to do after first boot
+com.android.printspooler                         # print spooler on a TV
+com.google.android.syncadapters.calendar         # calendar sync
+com.google.android.tv.bugreportsender            # bug report uploader
+
+# --- Preinstalled apps: remove the '# ' to disable one
+# com.google.android.play.games                  # Play Games
+# com.google.android.videos                      # Google TV Movies & TV (keep if you rent films there)
+# com.google.android.youtube.tvmusic             # YouTube Music
+# com.google.android.katniss                     # Google Assistant voice search (keep if you use the mic)
+# com.google.android.apps.mediashell             # Chromecast built-in (keep if you cast from your phone)
+# com.netflix.ninja                              # Netflix
+# com.amazon.amazonvideo.livingroom              # Prime Video
+
+# --- Home screen. The sponsored rows come from the stock launcher itself. Install Projectivy Launcher
+# or FLauncher from the Play Store FIRST, then uncomment both lines below and apply again.
+# tidytv refuses to disable the Home owner while no other launcher is installed.
+# com.google.android.apps.tv.launcherx           # stock Google TV home
+# com.google.android.tungsten.setupwraith        # setup wizard; grabs Home when the stock launcher goes, and nags "finish setting up"

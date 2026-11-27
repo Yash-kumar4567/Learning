@@ -120,16 +120,16 @@ object Levels {
     )
 
     /**
-     * Seconds to beat for the third star, levels 1..40. Rule: 1.5 x the ideal bot's fastest
-     * zero-out win (as SolvabilityProbe reports it, to 0.1 s) + 2 s, rounded up to a whole second.
-     * That puts the careful bot's median win under par on about half of the levels and the
-     * sloppy bot's on few; re-derive the table whenever a layout changes.
+     * Seconds to beat for the third star, levels 1..40. Rule: 1.2 x the median winning time of
+     * SolvabilityProbe's "careful" player (a steady but clumsy hand) + 2 s, rounded up, and
+     * never under 8 s. A quick, competent run beats it; a dawdling one does not. The times come
+     * from a bot, not a person: re-derive the table whenever a layout or the physics changes.
      */
     private val PAR = intArrayOf(
-        5, 6, 5, 7, 5, 5, 5, 6, 6, 7,
-        8, 5, 6, 5, 5, 7, 7, 6, 6, 7,
-        7, 5, 7, 8, 8, 8, 10, 5, 6, 9,
-        7, 11, 8, 8, 8, 10, 8, 8, 9, 10,
+        8, 8, 8, 10, 8, 8, 8, 11, 10, 11,
+        10, 9, 10, 8, 10, 10, 10, 10, 11, 10,
+        10, 8, 14, 12, 12, 17, 13, 14, 11, 15,
+        13, 14, 15, 15, 15, 11, 16, 15, 19, 17,
     )
 
     /** For the tuning probe only: try this layout number instead of the picked one, on this thread. */

@@ -1,19 +1,149 @@
 package com.papertilt.game.core
 
+import kotlin.math.ceil
 import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.random.Random
 
 /** A level ready to play. [par] is the time in seconds to beat for the third star. */
 class Built(val world: World, val hint: String?, val par: Float = Levels.defaultPar(world))
 
 /**
- * The campaign. Levels 1-4 are hand-made tutorials; the rest are generated
- * from the level number, so every player gets the same 40 levels.
+ * The campaign. Levels 1-4 are hand-made tutorials; the rest are generated from a plan
+ * (one row of knobs per level) and a hand-picked seed, so every player gets the same 40 levels.
+ *
+ * A generated layout is only accepted when it is fair by construction: spawn points are
+ * clear of open edges and of holes that would swallow the ball, pencil walls keep their
+ * distance from each other and from the rails, rolling any ball straight at its nearest
+ * hole does not cost another ball at once, and the level can be solved by sliding the
+ * balls into their holes one after another while every other ball stays well on the paper
+ * (see [Solver]). A seed that fails any of this is skipped and the next one is tried, so a
+ * level never ships with a ball or a hole missing.
  */
 object Levels {
     const val COUNT = 40
     const val W = 100f
     const val H = 150f
+
+    /** Balls spawn at least this far from an open edge, and this far from a railed one. */
+    internal const val SPAWN_OPEN = 20f
+    internal const val SPAWN_RAIL = 12f
+
+    /** Gap between a spawning ball and the rim of a hole that could take it wrongly, or of any moving hole's track. */
+    internal const val SPAWN_HOLE = 13f
+
+    /** Gap between a spawning ball and the rim of any other hole. */
+    internal const val SPAWN_OWN = 8f
+
+    /** Two pencil walls, or a wall and a rail, are either joined or at least this far apart (the largest ball needs 14.2). */
+    internal const val WALL_GAP = 16f
+
+    /** How far the obvious opening move is checked, and the room it must leave at open edges. */
+    internal const val OPENING = 40f
+    internal const val OPENING_EDGE = 8f
+
+    /** Rim-to-rim distance between two holes. */
+    internal const val HOLE_GAP = 10f
+
+    private const val HINT_TOGETHER = "All balls roll together.\nPlan the order."
+    private const val HINT_SAND = "Sand slows everything down."
+    private const val HINT_MOVING = "Some holes like to wander."
+    private const val HINT_NO_RAILS = "No rails at all now. Easy does it."
+
+    /**
+     * The knobs of one generated level. [edge] and [keep] say how much room the built-in
+     * solution must leave: every waiting ball stays [edge] from open edges and [keep] outside
+     * the pull of bigger holes. [starts] is how many different balls can go first. The holes
+     * that wander are the smallest on a [gentle] level (they can swallow nothing wrongly) and
+     * the biggest on a [big] one (they are a moving hazard for every smaller ball).
+     */
+    internal class Spec(
+        val rails: Int, val balls: Int, val holes: Int, val moving: Int, val sand: Int, val walls: Int,
+        val edge: Float, val keep: Float, val starts: Int = 1, val gentle: Boolean = false, val big: Boolean = false,
+    )
+
+    /**
+     * Levels 5..40. One new thing at a time: the rail count, the ball count, the first sand,
+     * and each extra moving hole all change on different levels, and the level that
+     * introduces something is a gentle one (roomier solution, more than one way to start).
+     * From level 24 on the rail count goes 0, 1 or 2 so that late levels differ in kind.
+     */
+    private val SPECS: List<Spec> = listOf(
+        //   rails balls holes moving sand walls  edge  keep
+        Spec(3, 2, 3, 0, 0, 1, 16f, 8f, 2, true),  // 5  two balls at once
+        Spec(3, 2, 3, 0, 0, 1, 16f, 8f),           // 6
+        Spec(3, 2, 3, 0, 0, 2, 16f, 7f),           // 7
+        Spec(3, 3, 4, 0, 0, 1, 16f, 8f, 2, true),  // 8  three balls
+        Spec(3, 3, 4, 0, 0, 2, 16f, 7f),           // 9
+        Spec(3, 3, 4, 0, 1, 1, 16f, 8f, 2, true),  // 10 first sand
+        Spec(3, 3, 5, 0, 1, 2, 16f, 7f),           // 11
+        Spec(2, 3, 4, 0, 1, 1, 16f, 8f, 2, true),  // 12 two rails
+        Spec(2, 3, 5, 0, 1, 2, 15f, 7f),           // 13
+        Spec(2, 3, 5, 0, 2, 2, 15f, 7f),           // 14
+        Spec(2, 3, 4, 1, 1, 1, 16f, 8f, 2, true),  // 15 first moving hole
+        Spec(2, 3, 5, 1, 1, 2, 15f, 7f),           // 16
+        Spec(2, 3, 5, 1, 1, 2, 15f, 6f),           // 17
+        Spec(1, 3, 4, 1, 1, 1, 16f, 8f, 2, true),  // 18 one rail
+        Spec(1, 3, 5, 1, 1, 2, 15f, 7f),           // 19
+        Spec(1, 3, 5, 1, 2, 2, 15f, 6f),           // 20
+        Spec(1, 4, 5, 1, 1, 1, 16f, 8f, 2, true),  // 21 four balls
+        Spec(1, 4, 6, 1, 1, 2, 15f, 7f),           // 22
+        Spec(1, 4, 6, 1, 2, 2, 15f, 6f),           // 23
+        Spec(0, 4, 5, 1, 1, 1, 16f, 8f, 2, true),  // 24 no rails
+        Spec(0, 4, 6, 1, 1, 2, 15f, 7f),           // 25
+        Spec(2, 4, 6, 1, 2, 2, 14f, 6f),           // 26
+        Spec(2, 4, 6, 2, 1, 2, 15f, 7f, 2, true),  // 27 second moving hole
+        Spec(0, 4, 6, 2, 1, 2, 14f, 6f),           // 28
+        Spec(1, 4, 7, 2, 2, 2, 13f, 6f),           // 29
+        Spec(1, 5, 7, 2, 1, 2, 14f, 7f, 2, true),  // 30 five balls
+        Spec(0, 5, 7, 2, 1, 2, 13f, 6f),           // 31
+        Spec(2, 5, 8, 2, 2, 3, 12f, 6f, big = true),  // 32
+        Spec(0, 5, 7, 2, 2, 2, 12f, 6f, big = true),  // 33
+        Spec(1, 5, 8, 2, 2, 3, 12f, 6f, big = true),  // 34
+        Spec(1, 5, 7, 3, 1, 2, 13f, 6f, 2, true),  // 35 third moving hole
+        Spec(0, 5, 7, 3, 1, 2, 12f, 6f, big = true),  // 36
+        Spec(2, 5, 8, 3, 2, 3, 12f, 6f, big = true),  // 37
+        Spec(2, 6, 8, 3, 1, 2, 13f, 6f, 2, true),  // 38 six balls
+        Spec(1, 6, 8, 3, 2, 3, 12f, 6f, big = true),  // 39
+        Spec(0, 6, 7, 3, 1, 2, 12f, 6f, big = true),  // 40
+    )
+
+    /**
+     * Which acceptable layout each generated level uses (index 0 is level 5). Picked with the
+     * solvability probe so that measured difficulty rises steadily; see SolvabilityProbe.
+     */
+    private val PICK = intArrayOf(
+        9, 8, 4, 12, 16, 11, 24, 77, 23, 26, 3, 19,
+        2, 63, 76, 19, 456, 278, 348, 150, 400, 21, 175, 80,
+        21, 3028, 5069, 2267, 4429, 8536, 6390, 56554, 11320, 27327, 679655, 341716,
+    )
+
+    /**
+     * Seconds to beat for the third star, levels 1..40. Rule: 1.5 x the ideal bot's fastest
+     * zero-out win (as SolvabilityProbe reports it, to 0.1 s) + 2 s, rounded up to a whole second.
+     * That puts the careful bot's median win under par on about half of the levels and the
+     * sloppy bot's on few; re-derive the table whenever a layout changes.
+     */
+    private val PAR = intArrayOf(
+        5, 6, 5, 7, 5, 5, 5, 6, 6, 7,
+        8, 5, 6, 5, 5, 7, 7, 6, 6, 7,
+        7, 5, 7, 8, 8, 8, 10, 5, 6, 9,
+        7, 11, 8, 8, 8, 10, 8, 8, 9, 10,
+    )
+
+    /** For the tuning probe only: try this layout number instead of the picked one, on this thread. */
+    internal val candidate = ThreadLocal<Int?>()
+
+    private fun firstLevel(test: (Spec) -> Boolean): Int = 5 + SPECS.indexOfFirst(test)
+
+    internal val firstSand: Int = firstLevel { it.sand > 0 }
+    internal val firstMoving: Int = firstLevel { it.moving > 0 }
+    internal val firstNoRails: Int = firstLevel { it.rails == 0 }
+
+    internal fun spec(n: Int): Spec = SPECS[n.coerceIn(5, COUNT) - 5]
+
+    private fun par(n: Int): Float = PAR[n - 1].toFloat()
 
     fun build(n: Int): Built = when (n) {
         1 -> Built(
@@ -23,6 +153,7 @@ object Levels {
                 balls.add(Ball(50f, 115f, Size.M, 0))
             },
             "Tilt your phone to roll\nthe ball into the hole.",
+            par(1),
         )
         2 -> Built(
             World(W, H).apply {
@@ -33,6 +164,7 @@ object Levels {
                 balls.add(Ball(70f, 120f, Size.L, 1))
             },
             "Match the size! A small ball lost\nin a big hole is an OUT.",
+            par(2),
         )
         3 -> Built(
             World(W, H).apply {
@@ -42,10 +174,11 @@ object Levels {
                 balls.add(Ball(50f, 118f, Size.M, 0))
             },
             "No rail on a dashed edge.\nRoll off the paper and you're OUT.",
+            par(3),
         )
         4 -> Built(
             World(W, H).apply {
-                rails(false, false, false, true)
+                rails(true, false, false, true)
                 walls.add(Wall(30f, 75f, 70f, 75f))
                 walls.add(Wall(78f, 20f, 78f, 50f))
                 holes.add(Hole(64f, 34f, Size.S))
@@ -55,8 +188,19 @@ object Levels {
                 balls.add(Ball(72f, 125f, Size.M, 1))
             },
             "Pencil walls stop a ball.\nLean on them.",
+            par(4),
         )
-        else -> generate(n)
+        else -> {
+            val w = layout(n, candidate.get() ?: PICK[n.coerceIn(5, COUNT) - 5])
+            val hint = when (n) {
+                5 -> HINT_TOGETHER
+                firstSand -> HINT_SAND
+                firstMoving -> HINT_MOVING
+                firstNoRails -> HINT_NO_RAILS
+                else -> null
+            }
+            Built(w, hint, if (n in 1..COUNT) par(n) else defaultPar(w))
+        }
     }
 
     /** A fully railed page of loose balls, shown behind the menu. */
@@ -77,117 +221,380 @@ object Levels {
         return 6f + 4f * w.balls.size + dist / 15f
     }
 
-    private fun samples(h: Hole): List<Pair<Float, Float>> =
-        if (!h.moving) listOf(h.baseX to h.baseY)
-        else listOf(-1f, -0.5f, 0f, 0.5f, 1f).map { (h.baseX + h.ampX * it) to (h.baseY + h.ampY * it) }
-
-    private fun generate(n: Int): Built {
-        val rng = Random(n * 7919 + 17)
-        val d = ((n - 5) / 35f).coerceIn(0f, 1f)
-        val w = World(W, H)
-
-        val nRails = when {
-            n < 9 -> 3
-            n < 14 -> 2
-            n < 22 -> 1
-            else -> 0
+    /** Layout number [pick] of generated level [n]; if it is not acceptable, the next one that is. */
+    private fun layout(n: Int, pick: Int): World {
+        val sp = spec(n)
+        var v = pick
+        while (true) {
+            generate(sp, n * 7919 + v * 104729 + 17)?.let { return it }
+            v++
         }
-        val sides = listOf(0, 1, 2, 3).shuffled(rng).take(nRails)
+    }
+
+    /** True when the layout picked for generated level [n] is acceptable as it is, so nothing had to be skipped. */
+    internal fun pickIsAcceptable(n: Int): Boolean = generate(spec(n), n * 7919 + PICK[n - 5] * 104729 + 17) != null
+
+    /** The numbers of the first [count] acceptable layouts of level [n], for the tuning probe. */
+    internal fun acceptable(n: Int, count: Int): List<Int> {
+        val out = ArrayList<Int>()
+        var v = 0
+        while (out.size < count) {
+            if (generate(spec(n), n * 7919 + v * 104729 + 17) != null) out.add(v)
+            v++
+        }
+        return out
+    }
+
+    // ---------------------------------------------------------------- geometry helpers
+
+    internal fun segDist(px: Float, py: Float, x1: Float, y1: Float, x2: Float, y2: Float): Float {
+        val ex = x2 - x1
+        val ey = y2 - y1
+        val len2 = ex * ex + ey * ey
+        val t = if (len2 <= 0f) 0f else (((px - x1) * ex + (py - y1) * ey) / len2).coerceIn(0f, 1f)
+        return hypot(px - (x1 + ex * t), py - (y1 + ey * t))
+    }
+
+    /** Closest distance between two segments (either may be a single point). */
+    internal fun segSeg(a: FloatArray, b: FloatArray): Float {
+        fun cross(ox: Float, oy: Float, px: Float, py: Float, qx: Float, qy: Float) = (px - ox) * (qy - oy) - (py - oy) * (qx - ox)
+        val d1 = cross(a[0], a[1], a[2], a[3], b[0], b[1])
+        val d2 = cross(a[0], a[1], a[2], a[3], b[2], b[3])
+        val d3 = cross(b[0], b[1], b[2], b[3], a[0], a[1])
+        val d4 = cross(b[0], b[1], b[2], b[3], a[2], a[3])
+        if (d1 * d2 < 0f && d3 * d4 < 0f) return 0f
+        return min(
+            min(segDist(a[0], a[1], b[0], b[1], b[2], b[3]), segDist(a[2], a[3], b[0], b[1], b[2], b[3])),
+            min(segDist(b[0], b[1], a[0], a[1], a[2], a[3]), segDist(b[2], b[3], a[0], a[1], a[2], a[3])),
+        )
+    }
+
+    /** The line a hole's centre travels along (a point for a hole that stays put). */
+    internal fun track(h: Hole) = floatArrayOf(h.baseX - h.ampX, h.baseY - h.ampY, h.baseX + h.ampX, h.baseY + h.ampY)
+
+    private fun seg(wl: Wall) = floatArrayOf(wl.x1, wl.y1, wl.x2, wl.y2)
+
+    /** Distance from a point to the nearest place a hole's centre can be. */
+    internal fun trackDist(h: Hole, x: Float, y: Float): Float =
+        segDist(x, y, h.baseX - h.ampX, h.baseY - h.ampY, h.baseX + h.ampX, h.baseY + h.ampY)
+
+    // ---------------------------------------------------------------- the generator
+
+    /** One attempt at a level; null when anything could not be placed or the result is not fair. */
+    private fun generate(sp: Spec, seed: Int): World? {
+        val rng = Random(seed)
+        val w = World(W, H)
+        val sides = listOf(0, 1, 2, 3).shuffled(rng).take(sp.rails)
         w.rails(0 in sides, 1 in sides, 2 in sides, 3 in sides)
+        val rt = w.railed[0]
+        val rr = w.railed[1]
+        val rb = w.railed[2]
+        val rl = w.railed[3]
 
-        val nBalls = (2 + (d * 4.2f).toInt()).coerceAtMost(6)
-        val nHoles = (nBalls + 1 + (d * 3f).toInt()).coerceAtMost(9)
-        val nMoving = if (n < 14) 0 else 1 + (n - 14) / 9
+        // Sizes: at least two different ball sizes, and every spare hole is a wrong hole for some ball.
+        val ballSizes = MutableList(sp.balls) { Size.values()[rng.nextInt(3)] }
+        if (ballSizes.distinct().size < 2) ballSizes[0] = Size.values()[(ballSizes[0].ordinal + 1 + rng.nextInt(2)) % 3]
+        if (sp.gentle) ballSizes.sortBy { it.ordinal }
+        if (sp.big) ballSizes.sortByDescending { it.ordinal }
+        val smallest = ballSizes.minOf { it.ordinal }
+        val holeSizes = ballSizes + List(sp.holes - sp.balls) { Size.values()[smallest + 1 + rng.nextInt(2 - smallest)] }
 
-        val ballSizes = MutableList(nBalls) { Size.values()[rng.nextInt(3)] }
-        if (ballSizes.all { it == Size.L }) ballSizes[0] = Size.S
-        val holeSizes = ballSizes + List(nHoles - nBalls) { Size.values()[rng.nextInt(3)] }
-
+        // Holes. The first few wander; on a gentle level those are the smallest, which swallow nothing wrongly.
         for ((i, s) in holeSizes.withIndex()) {
-            for (attempt in 0 until 400) {
+            var placed = false
+            for (attempt in 0 until 200) {
                 var ax = 0f
                 var ay = 0f
-                if (i < nMoving) {
+                if (i < sp.moving) {
                     val amp = 9f + rng.nextFloat() * 6f
                     if (rng.nextBoolean()) ax = amp else ay = amp
                 }
-                val x = 14f + ax + rng.nextFloat() * (72f - 2 * ax)
-                val y = 16f + ay + rng.nextFloat() * (118f - 2 * ay)
-                val cand = Hole(x, y, s, ax, ay, 4.5f + rng.nextFloat() * 2f, rng.nextFloat())
-                val ok = w.holes.all { o ->
-                    samples(o).all { (ox, oy) ->
-                        samples(cand).all { (cx, cy) -> hypot(cx - ox, cy - oy) >= cand.r + o.r + 9f }
-                    }
-                }
-                if (ok) {
+                val x0 = (if (rl) 14f else 18f) + ax
+                val x1 = W - (if (rr) 14f else 18f) - ax
+                val y0 = (if (rt) 14f else 18f) + ay
+                val y1 = H - (if (rb) 14f else 18f) - ay
+                val cand = Hole(
+                    x0 + rng.nextFloat() * (x1 - x0), y0 + rng.nextFloat() * (y1 - y0), s, ax, ay,
+                    4.5f + rng.nextFloat() * 2f, rng.nextFloat(),
+                )
+                if (w.holes.all { o -> segSeg(track(cand), track(o)) >= cand.r + o.r + HOLE_GAP }) {
                     w.holes.add(cand)
+                    placed = true
                     break
                 }
             }
+            if (!placed) return null
         }
-        // Every ball needs a hole of its own size; drop balls whose hole could not be placed.
-        val free = w.holes.map { it.size }.toMutableList()
-        var id = 0
-        for (s in ballSizes) {
-            if (!free.remove(s)) continue
-            for (attempt in 0 until 600) {
-                val x = 12f + rng.nextFloat() * 76f
-                val y = 12f + rng.nextFloat() * 126f
+
+        // Balls. Where both edges of an axis are open the balls start in a band, not spread from
+        // edge to edge: they slide as one formation and it needs room to move.
+        val bandW = if (!rl && !rr) 52f else W
+        val bandH = if (!rt && !rb) 80f else H
+        val bx = rng.nextFloat() * (W - bandW)
+        val by = rng.nextFloat() * (H - bandH)
+        val sx0 = max(bx, if (rl) SPAWN_RAIL else SPAWN_OPEN + 0.5f)
+        val sx1 = min(bx + bandW, W - (if (rr) SPAWN_RAIL else SPAWN_OPEN + 0.5f))
+        val sy0 = max(by, if (rt) SPAWN_RAIL else SPAWN_OPEN + 0.5f)
+        val sy1 = min(by + bandH, H - (if (rb) SPAWN_RAIL else SPAWN_OPEN + 0.5f))
+        for ((id, s) in ballSizes.withIndex()) {
+            var placed = false
+            for (attempt in 0 until 300) {
+                val x = sx0 + rng.nextFloat() * (sx1 - sx0)
+                val y = sy0 + rng.nextFloat() * (sy1 - sy0)
                 val clearOfHoles = w.holes.all { h ->
-                    samples(h).all { (hx, hy) -> hypot(x - hx, y - hy) >= h.r + s.ballR + 5f }
+                    val gap = if (h.moving || h.size.ordinal > s.ordinal) SPAWN_HOLE else SPAWN_OWN
+                    trackDist(h, x, y) >= h.r + s.ballR + gap
                 }
-                val clearOfBalls = w.balls.all { hypot(x - it.x, y - it.y) >= it.r + s.ballR + 4f }
-                if (clearOfHoles && clearOfBalls) {
-                    w.balls.add(Ball(x, y, s, id++))
+                if (clearOfHoles && w.balls.all { hypot(x - it.x, y - it.y) >= it.r + s.ballR + 4f }) {
+                    w.balls.add(Ball(x, y, s, id))
+                    placed = true
                     break
                 }
             }
+            if (!placed) return null
         }
 
-        val nWalls = 1 + rng.nextInt(2) + if (d > 0.5f) 1 else 0
-        for (k in 0 until nWalls) {
-            for (attempt in 0 until 80) {
-                val len = 16f + rng.nextFloat() * 14f
-                val cx = 22f + rng.nextFloat() * 56f
-                val cy = 26f + rng.nextFloat() * 98f
-                val (dx, dy) = when (rng.nextInt(3)) {
-                    0 -> 1f to 0f
-                    1 -> 0f to 1f
-                    else -> 0.707f to (if (rng.nextBoolean()) 0.707f else -0.707f)
+        // Pencil walls: free-standing, an L of two, or a shelf growing out of a rail.
+        val inner = ArrayList<Wall>()
+        while (inner.size < sp.walls) {
+            var placed = false
+            for (attempt in 0 until 120) {
+                val group = ArrayList<Wall>()
+                val kind = rng.nextInt(10)
+                if (kind < 2 && sp.walls - inner.size >= 2) {
+                    val cx = 24f + rng.nextFloat() * 52f
+                    val cy = 28f + rng.nextFloat() * 94f
+                    val a = (14f + rng.nextFloat() * 10f) * (if (rng.nextBoolean()) 1f else -1f)
+                    val b = (14f + rng.nextFloat() * 10f) * (if (rng.nextBoolean()) 1f else -1f)
+                    group.add(Wall(cx, cy, cx + a, cy))
+                    group.add(Wall(cx, cy, cx, cy + b))
+                } else if (kind < 4 && sp.rails > 0) {
+                    val len = 16f + rng.nextFloat() * 12f
+                    when (sides[rng.nextInt(sides.size)]) {
+                        0 -> { val x = 26f + rng.nextFloat() * 48f; group.add(Wall(x, 0f, x, len)) }
+                        1 -> { val y = 28f + rng.nextFloat() * 94f; group.add(Wall(W, y, W - len, y)) }
+                        2 -> { val x = 26f + rng.nextFloat() * 48f; group.add(Wall(x, H, x, H - len)) }
+                        else -> { val y = 28f + rng.nextFloat() * 94f; group.add(Wall(0f, y, len, y)) }
+                    }
+                } else {
+                    val len = 16f + rng.nextFloat() * 14f
+                    val cx = 22f + rng.nextFloat() * 56f
+                    val cy = 26f + rng.nextFloat() * 98f
+                    val (dx, dy) = when (rng.nextInt(3)) {
+                        0 -> 1f to 0f
+                        1 -> 0f to 1f
+                        else -> 0.707f to (if (rng.nextBoolean()) 0.707f else -0.707f)
+                    }
+                    group.add(Wall(cx - dx * len / 2, cy - dy * len / 2, cx + dx * len / 2, cy + dy * len / 2))
                 }
-                val x1 = cx - dx * len / 2
-                val y1 = cy - dy * len / 2
-                val x2 = cx + dx * len / 2
-                val y2 = cy + dy * len / 2
-                var ok = true
-                for (q in 0..8) {
-                    val px = x1 + (x2 - x1) * q / 8f
-                    val py = y1 + (y2 - y1) * q / 8f
-                    if (w.holes.any { h -> samples(h).any { (hx, hy) -> hypot(px - hx, py - hy) < h.r + 5f } }) ok = false
-                    if (w.balls.any { hypot(px - it.x, py - it.y) < it.r + 5f }) ok = false
-                }
-                if (ok) {
-                    w.walls.add(Wall(x1, y1, x2, y2))
+                if (group.all { wallFits(w, inner, it) }) {
+                    inner.addAll(group)
+                    placed = true
                     break
                 }
             }
+            if (!placed) return null
         }
+        w.walls.addAll(inner)
 
-        if (n >= 10) {
-            repeat(1 + n % 2) {
+        // Sand, never under a spawn point.
+        while (w.sand.size < sp.sand) {
+            var placed = false
+            for (attempt in 0 until 60) {
                 val zw = 22f + rng.nextFloat() * 14f
                 val zh = 16f + rng.nextFloat() * 10f
-                w.sand.add(Zone(4f + rng.nextFloat() * (92f - zw), 4f + rng.nextFloat() * (142f - zh), zw, zh))
+                val z = Zone(4f + rng.nextFloat() * (92f - zw), 4f + rng.nextFloat() * (142f - zh), zw, zh)
+                val apart = w.sand.all { o -> z.x > o.x + o.w + 6f || o.x > z.x + z.w + 6f || z.y > o.y + o.h + 6f || o.y > z.y + z.h + 6f }
+                val offSpawns = w.balls.all { b ->
+                    b.x < z.x - b.r - 2f || b.x > z.x + z.w + b.r + 2f || b.y < z.y - b.r - 2f || b.y > z.y + z.h + b.r + 2f
+                }
+                if (apart && offSpawns) {
+                    w.sand.add(z)
+                    placed = true
+                    break
+                }
             }
+            if (!placed) return null
         }
 
-        val hint = when (n) {
-            5 -> "All balls roll together.\nPlan the order."
-            10 -> "Sand slows everything down."
-            14 -> "Some holes like to wander."
-            22 -> "No rails at all now. Easy does it."
-            else -> null
+        val solver = Solver(w, inner, sp.edge, sp.keep)
+        if (!solver.openingsAreSafe() || solver.starts(sp.starts) < sp.starts) return null
+        return w
+    }
+
+    /**
+     * A wall is fine when every point of it is [WALL_GAP] from the paper's edge (or one end sits
+     * exactly on a rail and the rest is clear), [WALL_GAP] from every other wall, and clear of
+     * holes, their tracks and spawn points. The two arms of an L are checked one by one before
+     * either is added, so they are not measured against each other.
+     */
+    private fun wallFits(w: World, inner: List<Wall>, wl: Wall): Boolean {
+        val s = seg(wl)
+        val onRail = (wl.x1 == 0f && w.railed[3]) || (wl.x1 == W && w.railed[1]) || (wl.y1 == 0f && w.railed[0]) || (wl.y1 == H && w.railed[2])
+        fun inside(x: Float, y: Float) = x >= WALL_GAP && x <= W - WALL_GAP && y >= WALL_GAP && y <= H - WALL_GAP
+        if (!inside(wl.x2, wl.y2)) return false
+        if (!onRail && !inside(wl.x1, wl.y1)) return false
+        if (onRail) {
+            // a shelf must not make a narrow pocket with the neighbouring edge
+            val alongX = wl.y1 == wl.y2
+            if (alongX && (wl.y1 < 24f || wl.y1 > H - 24f)) return false
+            if (!alongX && (wl.x1 < 24f || wl.x1 > W - 24f)) return false
         }
-        return Built(w, hint)
+        if (inner.any { segSeg(s, seg(it)) < WALL_GAP }) return false
+        if (w.holes.any { segSeg(s, track(it)) < it.r + 6f }) return false
+        if (w.balls.any { segDist(it.x, it.y, wl.x1, wl.y1, wl.x2, wl.y2) < it.r + 5f }) return false
+        return true
+    }
+
+    /**
+     * Proof that a layout can be finished the plain way. All balls feel the same tilt, so until
+     * one meets a rail they move as a rigid formation. The solver looks for an order in which
+     * each ball in turn is slid straight to a hole of its size while every other ball stays
+     * [edge] away from the open edges, [keep] outside the pull of any hole that would swallow
+     * it, off the sand and off the pencil walls (so the formation really does stay rigid; rails
+     * simply stop a ball). Wandering holes are avoided along their whole track.
+     */
+    internal class Solver(private val w: World, private val inner: List<Wall>, private val edge: Float, private val keep: Float) {
+        private val nb = w.balls.size
+        private val nh = w.holes.size
+        private val alive = BooleanArray(nb) { true }
+        private val filled = BooleanArray(nh)
+        private var nodes = 0
+
+        /**
+         * The obvious opening must not cost a ball: for every ball, rolling it straight at the
+         * nearest hole of its size for [OPENING] units (or all the way, if that is nearer) keeps
+         * every other ball out of the pull of bigger holes and [OPENING_EDGE] away from open
+         * edges. The player may still have to change course; they get time to see it coming.
+         */
+        fun openingsAreSafe(): Boolean {
+            for (i in 0 until nb) {
+                val b = w.balls[i]
+                var best = Float.MAX_VALUE
+                var tx = 0f
+                var ty = 0f
+                for (h in w.holes) {
+                    if (h.size != b.size) continue
+                    // nearest point of the hole's track
+                    val ex = 2f * h.ampX
+                    val ey = 2f * h.ampY
+                    val len2 = ex * ex + ey * ey
+                    val t = if (len2 <= 0f) 0f else (((b.x - (h.baseX - h.ampX)) * ex + (b.y - (h.baseY - h.ampY)) * ey) / len2).coerceIn(0f, 1f)
+                    val hx = h.baseX - h.ampX + ex * t
+                    val hy = h.baseY - h.ampY + ey * t
+                    val d = hypot(hx - b.x, hy - b.y)
+                    if (d < best) { best = d; tx = hx; ty = hy }
+                }
+                if (best == Float.MAX_VALUE || best < 1f) continue
+                val reach = min(best, OPENING)
+                val ux = (tx - b.x) / best
+                val uy = (ty - b.y) / best
+                var s = 2f
+                while (s <= reach) {
+                    for (j in 0 until nb) {
+                        if (j == i) continue
+                        val o = w.balls[j]
+                        val m = o.r + World.WALL_T
+                        var x = o.x + ux * s
+                        var y = o.y + uy * s
+                        if (w.railed[3] && x < m) x = m
+                        if (w.railed[1] && x > w.w - m) x = w.w - m
+                        if (w.railed[0] && y < m) y = m
+                        if (w.railed[2] && y > w.h - m) y = w.h - m
+                        if (!w.railed[3] && x < OPENING_EDGE || !w.railed[1] && x > w.w - OPENING_EDGE) return false
+                        if (!w.railed[0] && y < OPENING_EDGE || !w.railed[2] && y > w.h - OPENING_EDGE) return false
+                        for (h in w.holes) {
+                            if (h.size.ordinal > o.size.ordinal && trackDist(h, x, y) < h.r + o.r * 0.3f + 2f) return false
+                        }
+                    }
+                    s += 2f
+                }
+            }
+            return true
+        }
+
+        /** How many different balls can go first in a complete solution (counting stops at [want]). */
+        fun starts(want: Int): Int {
+            val px = FloatArray(nb) { w.balls[it].x }
+            val py = FloatArray(nb) { w.balls[it].y }
+            var count = 0
+            for (i in 0 until nb) {
+                nodes = 0
+                if (solve(px, py, nb, i)) count++
+                if (count >= want) break
+            }
+            return count
+        }
+
+        private fun solve(px: FloatArray, py: FloatArray, left: Int, only: Int): Boolean {
+            if (left == 0) return true
+            if (++nodes > 300) return false
+            val nx = FloatArray(nb)
+            val ny = FloatArray(nb)
+            for (i in 0 until nb) {
+                if (!alive[i] || (only >= 0 && i != only)) continue
+                val b = w.balls[i]
+                for (hi in 0 until nh) {
+                    val h = w.holes[hi]
+                    if (filled[hi] || h.size != b.size) continue
+                    val stops = if (h.moving) 5 else 1
+                    for (s in 0 until stops) {
+                        val k = if (h.moving) -1f + 0.5f * s else 0f
+                        if (!slide(i, h.baseX + h.ampX * k - px[i], h.baseY + h.ampY * k - py[i], px, py, nx, ny)) continue
+                        alive[i] = false
+                        filled[hi] = true
+                        val ok = solve(nx, ny, left - 1, -1)
+                        alive[i] = true
+                        filled[hi] = false
+                        if (ok) return true
+                    }
+                }
+            }
+            return false
+        }
+
+        /** Move every loose ball by ([dx], [dy]); ball [i] is the one being delivered. False if any ball gets into trouble. */
+        private fun slide(i: Int, dx: Float, dy: Float, px: FloatArray, py: FloatArray, nx: FloatArray, ny: FloatArray): Boolean {
+            val steps = max(1, ceil(hypot(dx, dy) / 2f).toInt())
+            for (k in 1..steps) {
+                val t = k.toFloat() / steps
+                for (j in 0 until nb) {
+                    if (!alive[j]) continue
+                    val b = w.balls[j]
+                    val m = b.r + World.WALL_T
+                    var x = px[j] + dx * t
+                    var y = py[j] + dy * t
+                    if (w.railed[3] && x < m) x = m
+                    if (w.railed[1] && x > w.w - m) x = w.w - m
+                    if (w.railed[0] && y < m) y = m
+                    if (w.railed[2] && y > w.h - m) y = w.h - m
+                    if (j != i) {
+                        if (!w.railed[3] && x < edge || !w.railed[1] && x > w.w - edge) return false
+                        if (!w.railed[0] && y < edge || !w.railed[2] && y > w.h - edge) return false
+                    }
+                    for (hj in 0 until nh) {
+                        if (filled[hj]) continue
+                        val h = w.holes[hj]
+                        if (h.size.ordinal > b.size.ordinal) {
+                            if (trackDist(h, x, y) < h.r + b.r * 0.3f + keep) return false
+                        } else if (h.size == b.size && j != i) {
+                            if (trackDist(h, x, y) < h.r + b.r * 0.3f + 1f) return false
+                        }
+                    }
+                    for (wl in inner) if (segDist(x, y, wl.x1, wl.y1, wl.x2, wl.y2) < m + 1f) return false
+                    for (z in w.sand) if (z.contains(x, y)) return false
+                    nx[j] = x
+                    ny[j] = y
+                }
+            }
+            for (j in 0 until nb) {
+                if (!alive[j] || j == i) continue
+                for (l in j + 1 until nb) {
+                    if (!alive[l] || l == i) continue
+                    if (hypot(nx[j] - nx[l], ny[j] - ny[l]) < w.balls[j].r + w.balls[l].r) return false
+                }
+            }
+            return true
+        }
     }
 }

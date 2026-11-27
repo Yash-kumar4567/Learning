@@ -47,6 +47,11 @@ import org.junit.Test
  *
  * Output: a table on stdout and details in app/build/solvability/. The full run takes
  * about five minutes on four cores; set PROBE_LEVELS=22,38 to look at a few levels only.
+ * The summary lines are keyed to the level-design criteria: A1 winnable, A2 fair spawns,
+ * A3 no traps, A4 smooth curve, A5 clean walls, A6 par times.
+ *
+ * PROBE_SCAN=3 (with or without PROBE_LEVELS) plays the first three acceptable layouts of each
+ * generated level instead; that is how the entries of Levels.PICK were chosen.
  */
 class SolvabilityProbe {
 
@@ -863,6 +868,11 @@ class SolvabilityProbe {
         var needsTiming = false
         var unreachable = false
         val edgeSpawns = ArrayList<String>()
+        var minEdgeSpawn = 999f
+        var minBiggerGap = 999f
+        var minMovingGap = 999f
+        var spawnUnfair = false
+        var wallEndOdd = false
     }
 
     /** Geometry-only observations about a level. */
@@ -871,20 +881,49 @@ class SolvabilityProbe {
         val geo = Geo(w)
         val info = StaticInfo()
         if (n >= 5) {
-            val d = ((n - 5) / 35f).coerceIn(0f, 1f)
-            val nBalls = (2 + (d * 4.2f).toInt()).coerceAtMost(6)
-            val nHoles = (nBalls + 1 + (d * 3f).toInt()).coerceAtMost(9)
-            val nMoving = if (n < 14) 0 else 1 + (n - 14) / 9
-            if (w.balls.size != nBalls || w.holes.size != nHoles || w.holes.count { it.moving } != nMoving) {
+            val sp = Levels.spec(n)
+            val want = listOf(sp.rails, sp.balls, sp.holes, sp.moving, sp.sand, sp.walls)
+            val got = listOf(geo.rails, w.balls.size, w.holes.size, w.holes.count { it.moving }, w.sand.size, geo.inner.size)
+            if (want != got) {
                 info.dropped = true
-                info.notes.add("generator dropped pieces: wanted $nBalls balls/$nHoles holes/$nMoving moving, got ${w.balls.size}/${w.holes.size}/${w.holes.count { it.moving }}")
+                info.notes.add("generator dropped pieces: wanted rails/balls/holes/moving/sand/walls $want, got $got")
             }
         }
+        // A5: two pencil walls are either joined at a shared end (an L) or at least 14 apart; a wall end is on a rail or 14 from it
         for (i in geo.inner.indices) for (j in i + 1 until geo.inner.size) {
-            val d = segSegDist(geo.inner[i], geo.inner[j])
-            if (d < 2f * (Size.S.ballR + World.WALL_T)) {
+            val a = geo.inner[i]
+            val b = geo.inner[j]
+            val d = segSegDist(a, b)
+            val shared = (a[0] == b[0] && a[1] == b[1]) || (a[0] == b[2] && a[1] == b[3]) || (a[2] == b[0] && a[3] == b[1]) || (a[2] == b[2] && a[3] == b[3])
+            val square = abs((a[2] - a[0]) * (b[2] - b[0]) + (a[3] - a[1]) * (b[3] - b[1])) < 1e-3f
+            if (d < 14f && !(shared && square)) {
                 info.wallsOdd = true
-                info.notes.add((if (d == 0f) "walls $i and $j cross" else "walls $i and $j are %.1f apart (no ball fits between)".format(d)))
+                info.notes.add((if (d == 0f) "walls $i and $j cross or touch without being a clean L" else "walls $i and $j are %.1f apart (under 14)".format(d)))
+            }
+        }
+        for ((i, a) in geo.inner.withIndex()) for (e in 0..1) {
+            val x = a[e * 2]
+            val y = a[e * 2 + 1]
+            val onRail = (x == 0f && geo.railL) || (x == w.w && geo.railR) || (y == 0f && geo.railT) || (y == w.h && geo.railB)
+            var d = 999f
+            if (geo.railL) d = min(d, x)
+            if (geo.railR) d = min(d, w.w - x)
+            if (geo.railT) d = min(d, y)
+            if (geo.railB) d = min(d, w.h - y)
+            if (!onRail && d < 14f) {
+                info.wallEndOdd = true
+                info.notes.add("wall $i ends %.1f from a rail without touching it".format(d))
+            }
+        }
+        // A2: spawn clearances, against every position on a moving hole's track
+        for (b in w.balls) for ((hi, h) in w.holes.withIndex()) {
+            val s = sweep(h)
+            val gap = segDist(b.x, b.y, s[0], s[1], s[2], s[3]) - h.r - b.r
+            if (h.size.ordinal > b.size.ordinal) info.minBiggerGap = min(info.minBiggerGap, gap)
+            if (h.moving) info.minMovingGap = min(info.minMovingGap, gap)
+            if ((h.size.ordinal > b.size.ordinal || h.moving) && gap < 12f) {
+                info.spawnUnfair = true
+                info.notes.add("ball ${b.id} spawns %.1f from the rim of %s hole $hi (under 12)".format(gap, if (h.moving) "moving" else "bigger"))
             }
         }
         for ((hi, h) in w.holes.withIndex()) {
@@ -939,7 +978,8 @@ class SolvabilityProbe {
             if (!geo.railR) e = min(e, w.w - b.x)
             if (!geo.railT) e = min(e, b.y)
             if (!geo.railB) e = min(e, w.h - b.y)
-            if (e < 14f) info.edgeSpawns.add("L$n.b${b.id}(%.1f)".format(e))
+            info.minEdgeSpawn = min(info.minEdgeSpawn, e)
+            if (e < 20f) { info.spawnUnfair = true; info.edgeSpawns.add("L$n.b${b.id}(%.1f)".format(e)) }
         }
         // A ball alone on the tray, rolling from its spawn under a steady 0.3 tilt: how soon can it be lost?
         for (bi in w.balls.indices) {
@@ -1034,6 +1074,17 @@ class SolvabilityProbe {
         var rails = 0
         var cpuSec = 0f
         var balls = 0
+        var par = 0f
+        var label = ""
+
+        /** Clumsy trials (careful and sloppy together) in which a ball was lost within [EARLY_S] seconds of the start. */
+        var earlyOuts = 0
+        val handicapTimes = Array(HANDICAPS.size) { ArrayList<Float>() }
+
+        /** One number for "how hard was this for the clumsy players"; only for ranking levels against each other. */
+        val difficulty: Float
+            get() = (HANDICAP_TRIALS - handicapWins[0]) * 1f + (HANDICAP_TRIALS - handicapWins[1]) * 0.5f +
+                handicapOuts[0] * 1.5f + handicapOuts[1] * 0.5f + (IDEAL_ATTEMPTS - cleanWins) * 0.25f
     }
 
     private fun idealParams(level: Int, k: Int): Params {
@@ -1095,6 +1146,7 @@ class SolvabilityProbe {
         val w = Levels.build(n).world
         val geo = Geo(w)
         val res = LevelResult(n)
+        res.par = Levels.build(n).par
         res.balls = w.balls.size
         res.repeats = IntArray(w.balls.size)
         res.rails = geo.rails
@@ -1158,8 +1210,9 @@ class SolvabilityProbe {
 
         // clumsy hands
         for ((hi, hc) in HANDICAPS.withIndex()) {
+            if (hi > 0 && QUICK) continue
             var outsSum = 0f
-            val secs = ArrayList<Float>()
+            val secs = res.handicapTimes[hi]
             for (t in 0 until HANDICAP_TRIALS) {
                 val sim = Sim(n, hc, n * 7919L + hi * 104729L + t)
                 val p = Params(n * 17 + t, false, true, true, 3f, 1f, 10, 12, 100, false, false, wSpeed = 0.4f, speedFree = 3f, avoidRim = true, tiltScale = 0.5f)
@@ -1167,6 +1220,7 @@ class SolvabilityProbe {
                 val ok = out.won && verify(n, out.acts)
                 if (ok) { res.handicapWins[hi]++; outsSum += out.outs; secs.add(out.steps * DT) }
                 res.handicapOutEvents += out.outEvents.size
+                if (out.outEvents.isNotEmpty() && out.outEvents[0].first < EARLY_S * 120) res.earlyOuts++
                 for (i in out.outEvents.indices) for (j in i + 1 until out.outEvents.size) {
                     if (out.outEvents[i].second == out.outEvents[j].second && out.outEvents[j].first - out.outEvents[i].first < 360) {
                         res.quickRepeatOuts++
@@ -1194,10 +1248,94 @@ class SolvabilityProbe {
         return res
     }
 
+    private fun row(r: LevelResult): String {
+        fun m(v: Float) = if (v > 99f) "  - " else "%4.1f".format(v)
+        val sb = StringBuilder()
+        val name = if (r.label.isEmpty()) "L%02d".format(r.level) else r.label
+        sb.append(if (r.won) "%s WON     ideal %d/%d wins (%d clean), fewest outs %d (%d tries) in %5.1fs %s, room %s".format(
+            name, r.wins, r.attempts, r.cleanWins, r.minOuts, r.totalAttempts, r.bestSec, if (r.verified) "replay-ok" else "REPLAY-MISMATCH", if (r.room < 0f) " none" else m(r.room))
+        else "%s NOT WON ideal 0/%d, best %d/%d balls home".format(name, r.totalAttempts, r.bestHomes, r.balls))
+        for ((hi, hc) in HANDICAPS.withIndex()) {
+            if (hi > 0 && QUICK) continue
+            sb.append(" | %s %d/%d".format(hc.name, r.handicapWins[hi], HANDICAP_TRIALS))
+            if (r.handicapWins[hi] > 0) sb.append(" (%.1f, %.0fs)".format(r.handicapOuts[hi], r.handicapSec[hi]))
+        }
+        sb.append(" | naive ${r.naiveText} | par %.0fs | diff %4.1f | early %d/%d | ${r.shape}\n".format(r.par, r.difficulty, r.earlyOuts, if (QUICK) HANDICAP_TRIALS else 2 * HANDICAP_TRIALS))
+        return sb.toString()
+    }
+
+    /** A3 as a list of complaints; empty when the level is not a trap. */
+    private fun trapNotes(r: LevelResult): List<String> {
+        val out = ArrayList<String>()
+        if (!r.won || r.minOuts != 0 || !r.verified) out.add("no replay-confirmed zero-out win")
+        val need = if (r.level <= 30) 8 else 6
+        if (r.handicapWins[0] < need) out.add("careful ${r.handicapWins[0]}/$HANDICAP_TRIALS (needs $need)")
+        if (r.room < 8f) out.add("room %.1f (needs 8)".format(r.room))
+        // not asked for by number, but the same thing as an unfair start: the obvious opening move costs a ball
+        if (r.earlyOuts >= HANDICAP_TRIALS) out.add("a ball lost within %.0fs of the start in ${r.earlyOuts} of ${2 * HANDICAP_TRIALS} clumsy trials".format(EARLY_S))
+        return out
+    }
+
+    /**
+     * PROBE_SCAN=k: instead of the campaign as built, play the first k acceptable layouts of each
+     * level in PROBE_LEVELS (default 5..40), to choose which one goes into Levels.PICK. The clumsy
+     * trials use the same seeds as the real run, so a layout scores here what it will score there.
+     */
+    private fun scan(k: Int, only: Set<Int>?) {
+        val levels = (5..Levels.COUNT).filter { only == null || it in only }
+        val pool = Executors.newFixedThreadPool(THREADS)
+        File("build/solvability").mkdirs()
+        val jobs = ArrayList<java.util.concurrent.Future<LevelResult>>()
+        // PROBE_SCAN_SKIP=j leaves out the first j acceptable layouts (already played in an earlier scan)
+        val skip = System.getenv("PROBE_SCAN_SKIP")?.toIntOrNull() ?: 0
+        for (n in levels.reversed()) for (v in Levels.acceptable(n, k + skip).drop(skip)) {
+            jobs.add(pool.submit(Callable {
+                Levels.candidate.set(v)
+                try {
+                    solveLevel(n, StringBuilder()).also {
+                        it.label = "L%02d#%-3d".format(n, v)
+                        // also written at once, unsorted, so that an interrupted scan is not lost
+                        synchronized(this) { File("build/solvability/scan-partial.txt").appendText(row(it) + (if (it.flags.any { f -> f.startsWith("won by holding") }) "        ^ note: won by one fixed tilt\n" else "")) }
+                    }
+                } finally {
+                    Levels.candidate.remove()
+                }
+            }))
+        }
+        val results = jobs.map { it.get() }.sortedBy { it.label }
+        pool.shutdown()
+        val sb = StringBuilder("==== layout scan: first $k acceptable layouts per level (level#layout) ====\n")
+        for (r in results) {
+            sb.append(row(r))
+            val bad = trapNotes(r) + (if (r.info.spawnUnfair) listOf("unfair spawn") else emptyList()) + (if (r.info.wallsOdd || r.info.wallEndOdd) listOf("odd walls") else emptyList()) +
+                r.flags.filter { it.startsWith("plays itself") }
+            if (bad.isNotEmpty()) sb.append("        ^ rejected: ${bad.joinToString("; ")}\n")
+            if (r.flags.any { it.startsWith("won by holding") }) sb.append("        ^ note: won by one fixed tilt\n")
+        }
+        File("build/solvability").apply { mkdirs() }
+        File("build/solvability/scan.txt").appendText(sb.toString())
+        println(sb)
+    }
+
     @Test fun probe() {
         // Slow (minutes), so it only runs when asked for: PROBE=1 or PROBE_LEVELS=22,38.
-        org.junit.Assume.assumeTrue(System.getenv("PROBE") != null || System.getenv("PROBE_LEVELS") != null)
+        org.junit.Assume.assumeTrue(listOf("PROBE", "PROBE_LEVELS", "PROBE_SCAN", "PROBE_LIST").any { System.getenv(it) != null })
         val outDir = File("build/solvability").apply { mkdirs() }
+        val only = System.getenv("PROBE_LEVELS")?.split(",")?.mapNotNull { it.trim().toIntOrNull() }?.toSet()
+        System.getenv("PROBE_LIST")?.toIntOrNull()?.let { k ->
+            // no bot: just the numbers of the first k acceptable layouts per level (and how long the search took)
+            val text = StringBuilder()
+            for (n in 5..Levels.COUNT) {
+                if (only != null && n !in only) continue
+                val t = System.currentTimeMillis()
+                val list = Levels.acceptable(n, k)
+                text.append("L%02d acceptable layouts %s (%d ms)\n".format(n, list, System.currentTimeMillis() - t))
+            }
+            File(outDir, "list.txt").writeText(text.toString())
+            println(text)
+            return
+        }
+        System.getenv("PROBE_SCAN")?.toIntOrNull()?.let { scan(it, only); return }
         val geoText = StringBuilder()
         for (n in 1..Levels.COUNT) geoText.append(describe(n)).append('\n')
         File(outDir, "levels.txt").writeText(geoText.toString())
@@ -1206,7 +1344,6 @@ class SolvabilityProbe {
         val pool = Executors.newFixedThreadPool(THREADS)
         val logs = Array(Levels.COUNT + 1) { StringBuilder() }
         // latest levels first: they take longest, so they should not all queue up at the end
-        val only = System.getenv("PROBE_LEVELS")?.split(",")?.mapNotNull { it.trim().toIntOrNull() }?.toSet()
         val futures = (Levels.COUNT downTo 1).filter { only == null || it in only }.map { n -> pool.submit(Callable { solveLevel(n, logs[n]) }) }
         val results = futures.map { it.get() }.sortedBy { it.level }
         pool.shutdown()
@@ -1226,18 +1363,10 @@ class SolvabilityProbe {
             "Its best run is replayed on a fresh SoloGame. room = in the roomiest zero-out win found, the closest any ball came to an open edge or to a bigger hole's catch radius (tray is 100 x 150; '-' = nothing to avoid).\n")
         sb.append(HANDICAPS.joinToString(". ") { "${it.name}: same brain, half-strength steering, hand lag %.2fs, %.2fs delay it does not know about, wobble %.2fg".format(it.lagTau, it.delay * DT, it.sigma) } +
             "; $HANDICAP_TRIALS trials each, shown as wins (avg outs, median s of the wins). naive: aims straight at the hole.\n")
+        sb.append("par: the level's third-star time. early: clumsy trials that lost a ball in the first %.0f s. diff:".format(EARLY_S) + "  (10 - careful wins) + 0.5 x (10 - sloppy wins) + 1.5 x careful avg outs + 0.5 x sloppy avg outs + 0.25 x (8 - ideal clean wins); a ranking aid, not a unit.\n")
         sb.append("shape: b balls, h holes, r rails (T,R,B,L), w inner walls, s sand, m moving holes\n")
         for (r in results) {
-            fun m(v: Float) = if (v > 99f) "  - " else "%4.1f".format(v)
-            val head = if (r.won) "L%02d WON     ideal %d/%d wins (%d clean), fewest outs %d (%d tries) in %5.1fs %s, room %s".format(
-                r.level, r.wins, r.attempts, r.cleanWins, r.minOuts, r.totalAttempts, r.bestSec, if (r.verified) "replay-ok" else "REPLAY-MISMATCH", if (r.room < 0f) " none" else m(r.room))
-            else "L%02d NOT WON ideal 0/%d, best %d/%d balls home".format(r.level, r.totalAttempts, r.bestHomes, r.balls)
-            sb.append(head)
-            for ((hi, hc) in HANDICAPS.withIndex()) {
-                sb.append(" | %s %d/%d".format(hc.name, r.handicapWins[hi], HANDICAP_TRIALS))
-                if (r.handicapWins[hi] > 0) sb.append(" (%.1f, %.0fs)".format(r.handicapOuts[hi], r.handicapSec[hi]))
-            }
-            sb.append(" | naive ${r.naiveText} | ${r.shape}\n")
+            sb.append(row(r))
             for (f in r.flags) fl.append("L%02d: %s\n".format(r.level, f))
             for (f in r.info.notes) fl.append("L%02d: %s\n".format(r.level, f))
             for ((bi, c) in r.repeats.withIndex()) if (c > 0) fl.append("L%02d: ball %d was lost twice within 3s in %d of %d clumsy trials\n".format(r.level, bi, c, 2 * HANDICAP_TRIALS))
@@ -1245,28 +1374,50 @@ class SolvabilityProbe {
         for (d in dupes) fl.append("levels $d have the same layout\n")
 
         fun lv(list: List<LevelResult>) = if (list.isEmpty()) "none" else list.joinToString(" ") { "L${it.level}" }
-        sb.append("not won: ${lv(results.filter { !it.won })}; no zero-out win found: " +
+        sb.append("A1 not won: ${lv(results.filter { !it.won })}; no zero-out win found: " +
             (results.filter { it.won && it.minOuts > 0 }.joinToString(" ") { "L${it.level}(${it.minOuts} outs)" }.ifEmpty { "none" }) +
-            "; replay mismatches: ${lv(results.filter { it.won && !it.verified })}; identical layouts: ${dupes.size}\n")
-        sb.append("plays itself when flat: ${lv(results.filter { r -> r.flags.any { it.startsWith("plays itself") } })}; won by one fixed tilt: ${lv(results.filter { r -> r.flags.any { it.startsWith("won by holding") } })}; " +
-            "generator dropped a ball or hole: ${lv(results.filter { it.info.dropped })}; a ball with no route to its hole: ${lv(results.filter { it.info.unreachable })}; route only by timing a moving bigger hole: ${lv(results.filter { it.info.needsTiming })}\n")
-        sb.append("walls doubled or crossing: ${lv(results.filter { it.info.wallsOdd })}; closest a moving hole's pull comes to a spawn: %.1f units; spawn where most steady tilts lose the ball at once: ".format(results.minOf { it.info.closestSweep }) +
+            "; replay mismatches: ${lv(results.filter { it.won && !it.verified })}; plays itself when flat (30 s): ${lv(results.filter { r -> r.flags.any { it.startsWith("plays itself") } })}; identical layouts: ${dupes.size}\n")
+        sb.append("A2 spawns: closest to an open edge %.1f (needs 20), closest to the rim of a bigger hole %.1f and of a moving hole's track %.1f (need 12 each); levels breaking this: ${lv(results.filter { it.info.spawnUnfair })}\n".format(
+            results.minOf { it.info.minEdgeSpawn }, results.minOf { it.info.minBiggerGap }, results.minOf { it.info.minMovingGap }))
+        sb.append("A3 traps (careful under 8/10 on L1-30 or under 6/10 later, or roomiest clean win under 8, or a ball lost within %.0fs of the start in half of the $HANDICAP_TRIALS + $HANDICAP_TRIALS clumsy trials): ".format(EARLY_S) +
+            results.filter { trapNotes(it).isNotEmpty() }.joinToString("; ") { "L${it.level} ${trapNotes(it).joinToString(", ")}" }.ifEmpty { "none" } +
+            "; lowest room %.1f; careful wins L1-30 min %d, L31-40 min %d\n".format(
+                results.minOf { if (it.room < 0f) 0f else it.room },
+                results.filter { it.level <= 30 }.minOfOrNull { it.handicapWins[0] } ?: -1, results.filter { it.level > 30 }.minOfOrNull { it.handicapWins[0] } ?: -1))
+        sb.append("A3 openings: clumsy trials (of ${2 * HANDICAP_TRIALS}) that lost a ball within %.0fs of the start, by level: ".format(EARLY_S) +
+            results.filter { it.earlyOuts > 0 }.joinToString(" ") { "%d:%d".format(it.level, it.earlyOuts) }.ifEmpty { "none" } + "\n")
+        val byLevel = results.associateBy { it.level }
+        val steps = results.mapNotNull { r -> byLevel[r.level + 4]?.let { later -> Triple(r.level, r.difficulty - later.difficulty, later.level) } }
+        sb.append("A4 curve: diff by level " + results.joinToString(" ") { "%d:%.1f".format(it.level, it.difficulty) } + "\n")
+        sb.append("A4 clearly harder than the level 4 places later (diff more than $CLIFF above it): " +
+            steps.filter { it.second > CLIFF }.joinToString(" ") { "L%d>L%d(+%.1f)".format(it.first, it.third, it.second) }.ifEmpty { "none" } +
+            "; biggest jump between neighbours: " + (results.zipWithNext().maxByOrNull { it.second.difficulty - it.first.difficulty }?.let { "L%d->L%d +%.1f".format(it.first.level, it.second.level, it.second.difficulty - it.first.difficulty) } ?: "-") + "\n")
+        sb.append("A5 walls under 14 apart without being a clean L: ${lv(results.filter { it.info.wallsOdd })}; wall end near a rail but not on it: ${lv(results.filter { it.info.wallEndOdd })}; generator dropped a ball or hole: ${lv(results.filter { it.info.dropped })}\n")
+        val underPar = HANDICAPS.indices.map { hi -> results.sumOf { r -> r.handicapTimes[hi].count { it <= r.par } } to results.sumOf { it.handicapTimes[hi].size } }
+        sb.append("A6 par: ideal's fastest clean win beats par on ${results.count { it.won && it.minOuts == 0 && it.bestSec <= it.par }} of ${results.size} levels (smallest gap %.1fs); ".format(results.filter { it.won }.minOfOrNull { it.par - it.bestSec } ?: 0f) +
+            "careful median win is under par on ${results.count { it.handicapWins[0] > 0 && it.handicapSec[0] <= it.par }} of ${results.size}; " +
+            "winning runs under par: careful ${underPar[0].first}/${underPar[0].second}, sloppy ${underPar[1].first}/${underPar[1].second}\n")
+        sb.append("A6 times (level: ideal fastest clean / careful median / sloppy median / par): " + results.joinToString(" ") { "%d:%.1f/%.1f/%.1f/%.0f".format(it.level, it.bestSec, it.handicapSec[0], it.handicapSec[1], it.par) } + "\n")
+        sb.append("won by one fixed tilt: ${lv(results.filter { r -> r.flags.any { it.startsWith("won by holding") } })}; " +
+            "a ball with no route to its hole: ${lv(results.filter { it.info.unreachable })}; route only by timing a moving bigger hole: ${lv(results.filter { it.info.needsTiming })}\n")
+        sb.append("closest a moving hole's pull comes to a spawn: %.1f units; spawn where most steady tilts lose the ball at once: ".format(results.minOf { it.info.closestSweep }) +
             (results.filter { it.info.trapText.isNotEmpty() }.joinToString("; ") { "L${it.level} ${it.info.trapText}" }.ifEmpty { "none" }) + "\n")
         sb.append("first ball by sliding all balls together (no-rail levels; pairings possible / best gap left to an open edge): " +
             results.filter { it.rails == 0 }.joinToString(" ") { "L%d:%d/%d,%.0f".format(it.level, it.info.feasible, it.info.pairs, it.info.bestSlack) } + "\n")
         sb.append("naive bot wins with 0 outs: ${lv(results.filter { it.naiveWon && it.naiveOuts == 0 })}; in the clumsy trials ${results.sumOf { it.quickRepeatOuts }} of ${results.sumOf { it.handicapOutEvents }} outs were the same ball lost again within 3s; worst (level.ball x times): " +
             results.flatMap { r -> r.repeats.withIndex().filter { it.value >= 5 }.map { "L${r.level}.b${it.index} x${it.value}" } }.joinToString(" ").ifEmpty { "none" } + "\n")
-        sb.append("spawn points within 14 units of an open edge (level.ball(distance)): " + results.flatMap { it.info.edgeSpawns }.joinToString(" ").ifEmpty { "none" } + "\n")
-        sb.append("by band (levels: ideal clean wins per $IDEAL_ATTEMPTS tries / median fastest clean s / min room | careful win% | sloppy win% | naive wins):\n")
-        for (band in listOf(1..4, 5..13, 14..21, 22..31, 32..40)) {
+        sb.append("spawn points within 20 units of an open edge (level.ball(distance)): " + results.flatMap { it.info.edgeSpawns }.joinToString(" ").ifEmpty { "none" } + "\n")
+        sb.append("by band (levels: ideal clean wins per $IDEAL_ATTEMPTS tries / median fastest clean s / min room | careful win%, avg outs | sloppy win%, avg outs | naive wins | mean diff):\n")
+        for (band in listOf(1..4, 5..9, 10..14, 15..19, 20..24, 25..29, 30..35, 36..40)) {
             val rs = results.filter { it.level in band }
             if (rs.isEmpty()) continue
             val secs = rs.filter { it.won }.map { it.bestSec }.sorted()
-            sb.append("  L%02d-%02d: %.1f / %.1fs / %.1f | %.0f%% | %.0f%% | %d of %d\n".format(
+            sb.append("  L%02d-%02d: %.1f / %.1fs / %.1f | %.0f%%, %.2f | %.0f%%, %.2f | %d of %d | %.1f\n".format(
                 band.first, band.last, rs.map { it.cleanWins }.average(), if (secs.isEmpty()) 0f else secs[secs.size / 2],
                 rs.minOf { if (it.room < 0f) 0f else it.room },
-                rs.sumOf { it.handicapWins[0] } * 100.0 / (rs.size * HANDICAP_TRIALS), rs.sumOf { it.handicapWins[1] } * 100.0 / (rs.size * HANDICAP_TRIALS),
-                rs.count { it.naiveWon }, rs.size))
+                rs.sumOf { it.handicapWins[0] } * 100.0 / (rs.size * HANDICAP_TRIALS), rs.map { it.handicapOuts[0] }.average(),
+                rs.sumOf { it.handicapWins[1] } * 100.0 / (rs.size * HANDICAP_TRIALS), rs.map { it.handicapOuts[1] }.average(),
+                rs.count { it.naiveWon }, rs.size, rs.map { it.difficulty }.average()))
         }
         sb.append("details: app/build/solvability/{levels,attempts,flags,results}.txt; total %.0fs\n".format((System.currentTimeMillis() - t0) / 1000f))
         File(outDir, "results.txt").writeText(sb.toString())
@@ -1284,6 +1435,15 @@ class SolvabilityProbe {
         const val DEAD_ZONE = 0.012f
         const val NOISE_TAU = 0.4f
         const val THREADS = 4
+
+        /** PROBE_QUICK=1 skips the sloppy player (about half the cost); for scans only. */
+        val QUICK = System.getenv("PROBE_QUICK") != null
+
+        /** How much higher "diff" may be than four levels later before it is called a cliff. */
+        const val CLIFF = 3f
+
+        /** An out this soon after the start says more about the layout than about the player. */
+        const val EARLY_S = 2f
         const val IDEAL_ATTEMPTS = 8
         const val IDEAL_MAX = 30
         const val HANDICAP_TRIALS = 10

@@ -1,6 +1,7 @@
 package com.papertilt.game
 
 import android.graphics.Canvas
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
 import kotlin.math.PI
@@ -8,9 +9,18 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 
-/** Hand-drawn looking strokes: every shape is drawn twice with slightly different wobble. */
+/**
+ * Hand-drawn looking strokes: every shape is drawn twice with slightly different wobble.
+ *
+ * The `zoom` argument is for a canvas that has been scaled up (the tray is drawn in its own
+ * units). Before Android 9 a stroked path on a scaled, hardware-accelerated canvas is
+ * rasterised at 1:1 and then stretched, which blurs it. Passing the canvas's zoom makes the
+ * stroke scale the path itself and draw it with the canvas zoom undone, which is sharp on
+ * every version.
+ */
 object Sketch {
     private val path = Path()
+    private val matrix = Matrix()
     private val px = FloatArray(12)
     private val py = FloatArray(12)
 
@@ -22,7 +32,23 @@ object Sketch {
         return (h and 0xFFFF) / 65535f - 0.5f
     }
 
-    fun line(c: Canvas, x1: Float, y1: Float, x2: Float, y2: Float, p: Paint, seed: Int, wob: Float) {
+    private fun stroke(c: Canvas, p: Paint, zoom: Float) {
+        if (zoom == 1f) {
+            c.drawPath(path, p)
+            return
+        }
+        matrix.setScale(zoom, zoom)
+        path.transform(matrix)
+        val width = p.strokeWidth
+        p.strokeWidth = width * zoom
+        c.save()
+        c.scale(1f / zoom, 1f / zoom)
+        c.drawPath(path, p)
+        c.restore()
+        p.strokeWidth = width
+    }
+
+    fun line(c: Canvas, x1: Float, y1: Float, x2: Float, y2: Float, p: Paint, seed: Int, wob: Float, zoom: Float = 1f) {
         val len = hypot(x2 - x1, y2 - y1)
         if (len < 1e-3f) return
         val nx = -(y2 - y1) / len
@@ -38,12 +64,12 @@ object Sketch {
                 x1 + (x2 - x1) * 0.66f + nx * b, y1 + (y2 - y1) * 0.66f + ny * b,
                 x2 + rnd(s, 4) * wob, y2 + rnd(s, 5) * wob,
             )
-            c.drawPath(path, p)
+            stroke(c, p, zoom)
         }
     }
 
     /** [wob] is a fraction of the radius. */
-    fun circle(c: Canvas, cx: Float, cy: Float, r: Float, p: Paint, seed: Int, wob: Float) {
+    fun circle(c: Canvas, cx: Float, cy: Float, r: Float, p: Paint, seed: Int, wob: Float, zoom: Float = 1f) {
         val n = px.size
         for (pass in 0..1) {
             val s = seed + pass * 31
@@ -62,7 +88,7 @@ object Sketch {
                 path.quadTo(px[j], py[j], (px[j] + px[k]) / 2, (py[j] + py[k]) / 2)
             }
             path.close()
-            c.drawPath(path, p)
+            stroke(c, p, zoom)
         }
     }
 
@@ -71,6 +97,17 @@ object Sketch {
         line(c, r, t, r, b, p, seed + 7, wob)
         line(c, r, b, l, b, p, seed + 13, wob)
         line(c, l, b, l, t, p, seed + 19, wob)
+    }
+
+    /** A plain, straight-edged outline. A path effect on [p] must be given in zoomed units. */
+    fun box(c: Canvas, l: Float, t: Float, r: Float, b: Float, p: Paint, zoom: Float = 1f) {
+        path.rewind()
+        path.moveTo(l, t)
+        path.lineTo(r, t)
+        path.lineTo(r, b)
+        path.lineTo(l, b)
+        path.close()
+        stroke(c, p, zoom)
     }
 
     fun star(c: Canvas, cx: Float, cy: Float, r: Float, p: Paint) {

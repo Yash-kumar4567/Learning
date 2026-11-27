@@ -1,6 +1,7 @@
 package com.papertilt.game
 
 import android.app.Activity
+import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -17,6 +18,8 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // The volume keys should change the game's sound, not the ringer.
+        volumeControlStream = AudioManager.STREAM_MUSIC
         if (Build.VERSION.SDK_INT >= 28) {
             window.attributes = window.attributes.apply {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
@@ -24,6 +27,7 @@ class MainActivity : Activity() {
         }
         val prefs = Prefs(this)
         tilt = Tilt(this)
+        tilt.gain = Tilt.GAINS[prefs.sens]
         sfx = Sfx()
         sfx.enabled = prefs.sound
         view = GameView(this, tilt, sfx, prefs)
@@ -50,7 +54,8 @@ class MainActivity : Activity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) hideBars()
+        // The notification shade and system dialogs take focus without pausing the activity.
+        if (hasFocus) hideBars() else view.onHostPause()
     }
 
     @Deprecated("Deprecated in Java")

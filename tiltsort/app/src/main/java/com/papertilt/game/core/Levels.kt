@@ -3,7 +3,8 @@ package com.papertilt.game.core
 import kotlin.math.hypot
 import kotlin.random.Random
 
-class Built(val world: World, val hint: String?)
+/** A level ready to play. [par] is the time in seconds to beat for the third star. */
+class Built(val world: World, val hint: String?, val par: Float = Levels.defaultPar(world))
 
 /**
  * The campaign. Levels 1-4 are hand-made tutorials; the rest are generated
@@ -65,6 +66,15 @@ object Levels {
         for ((i, s) in sizes.withIndex()) {
             balls.add(Ball(16f + (i % 4) * 22f, 30f + (i / 4) * 60f + i * 5f, s, i))
         }
+    }
+
+    /** A rough par from the layout: a few seconds per ball plus the distance each has to travel. */
+    fun defaultPar(w: World): Float {
+        var dist = 0f
+        for (b in w.balls) {
+            dist += w.holes.filter { it.size == b.size }.minOfOrNull { hypot(it.baseX - b.x, it.baseY - b.y) } ?: 0f
+        }
+        return 6f + 4f * w.balls.size + dist / 15f
     }
 
     private fun samples(h: Hole): List<Pair<Float, Float>> =

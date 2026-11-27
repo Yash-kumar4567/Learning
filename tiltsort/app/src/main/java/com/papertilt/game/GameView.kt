@@ -226,6 +226,7 @@ class GameView(
                     floaters.add(Floater(f.x, f.y, "+1", PLAYER[f.n], f.n == 1))
                 }
                 FxKind.SPAWN -> sfx.play(Snd.POP)
+                FxKind.MEND -> {}
                 FxKind.SHOVE -> sfx.play(Snd.POP)
                 FxKind.WIN -> {
                     sfx.play(Snd.WIN)

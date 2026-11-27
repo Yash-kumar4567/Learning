@@ -86,7 +86,14 @@ class World(val w: Float, val h: Float, val holesFill: Boolean = true) {
     val events = ArrayList<Event>()
     var time = 0f
 
+    /** Which edges have a rail: top, right, bottom, left. The others are open. */
+    val railed = BooleanArray(4)
+
     fun rails(top: Boolean, right: Boolean, bottom: Boolean, left: Boolean) {
+        railed[0] = top
+        railed[1] = right
+        railed[2] = bottom
+        railed[3] = left
         if (top) walls.add(Wall(0f, 0f, w, 0f))
         if (right) walls.add(Wall(w, 0f, w, h))
         if (bottom) walls.add(Wall(0f, h, w, h))
@@ -102,7 +109,8 @@ class World(val w: Float, val h: Float, val holesFill: Boolean = true) {
             when (b.state) {
                 BallState.SPAWNING -> {
                     b.t += dt
-                    if (b.t >= SPAWN_T) {
+                    // Wait for the spot to clear, so a ball never pops in on top of another.
+                    if (b.t >= SPAWN_T && spotClear(b)) {
                         b.state = BallState.ROLLING
                         b.t = 0f
                     }
@@ -138,6 +146,25 @@ class World(val w: Float, val h: Float, val holesFill: Boolean = true) {
             }
         }
         collideBalls()
+    }
+
+    private fun spotClear(b: Ball): Boolean {
+        for (o in balls) {
+            if (o !== b && o.state == BallState.ROLLING && hypot(o.x - b.x, o.y - b.y) < o.r + b.r) return false
+        }
+        return true
+    }
+
+    /** True when [b] is rolling close to something that would cost an out. */
+    fun inDanger(b: Ball): Boolean {
+        if (b.state != BallState.ROLLING) return false
+        if (!railed[0] && b.y < EDGE_WARN || !railed[2] && b.y > h - EDGE_WARN) return true
+        if (!railed[3] && b.x < EDGE_WARN || !railed[1] && b.x > w - EDGE_WARN) return true
+        for (hl in holes) {
+            if (hl.filled || hl.size.ordinal <= b.size.ordinal) continue
+            if (hypot(hl.x - b.x, hl.y - b.y) < hl.r + b.r * 0.3f + 2.5f) return true
+        }
+        return false
     }
 
     private fun roll(b: Ball, dt: Float, tx: Float, ty: Float) {
@@ -247,11 +274,12 @@ class World(val w: Float, val h: Float, val holesFill: Boolean = true) {
     }
 
     companion object {
-        const val ACC = 260f
-        const val FRICTION = 0.8f
-        const val SAND_FRICTION = 4.5f
+        const val ACC = 360f
+        const val FRICTION = 1.5f
+        const val SAND_FRICTION = 5.5f
         const val RIM_PULL = 90f
-        const val MAX_V = 170f
+        const val MAX_V = 150f
+        const val EDGE_WARN = 9f
         const val WALL_T = 0.8f
         const val WALL_BOUNCE = 0.45f
         const val BALL_BOUNCE = 0.6f

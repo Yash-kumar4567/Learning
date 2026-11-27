@@ -1,6 +1,7 @@
 package com.papertilt.game
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.DashPathEffect
@@ -62,14 +63,16 @@ class GameView(
     private var fasterThanBefore = false
 
     private var lastNs = 0L
-    private var clock = 0f
-    private var lastBump = -1f
+
+    /** Seconds of drawn time since launch. A Double, so that it keeps counting however long the game stays open. */
+    private var clock = 0.0
+    private var lastBump = -1.0
 
     /** Buttons ignore taps until the clock reaches this; see [TAP_GUARD]. */
-    private var armAt = 0f
+    private var armAt = 0.0
 
     /** Clock time at which the round ended, or -1. The result panel follows [RESULT_DELAY] later. */
-    private var overAt = -1f
+    private var overAt = -1.0
     private var starsRung = 0
     private var shake = 0f
     private var lastMult = 1
@@ -147,7 +150,7 @@ class GameView(
         paused = false
         ready = !inGame
         tooSteep = false
-        overAt = -1f
+        overAt = -1.0
         starsRung = 0
         shake = 0f
         lastMult = 1
@@ -189,12 +192,17 @@ class GameView(
         begin(if (screen == Screen.SOLO) Screen.LEVELS else Screen.MENU)
     }
 
+    /**
+     * True when play itself puts fingers on the glass: Tug's shove taps, or dragging to tilt on
+     * a device with no sensor. A panel that appears then waits a moment before its buttons work.
+     */
+    private val fingersOnScreen: Boolean get() = screen == Screen.TUG || !tilt.available
+
     private fun pause() {
         if (!inGame || !ready || roundOver || paused) return
         paused = true
         tooSteep = false
-        // In Tug both players are tapping the screen, so the panel's buttons wait a moment before they work.
-        armAt = clock + if (screen == Screen.TUG) PANEL_GUARD else TAP_GUARD
+        armAt = clock + if (fingersOnScreen) PANEL_GUARD else TAP_GUARD
     }
 
     /** The activity is no longer in front (paused, or covered by the notification shade or a dialog). */
@@ -217,6 +225,9 @@ class GameView(
     private fun startRound() {
         if (screen == Screen.TUG) {
             tilt.zeroFlat()
+            // Both players tap their own card. The shoves start out recharging, so the second
+            // of those taps is not taken as a shove.
+            tug?.cooldown?.fill(TUG_KICKOFF)
         } else if (tilt.available && !tilt.calibrate()) {
             tooSteep = true
             buzz(HapticFeedbackConstants.LONG_PRESS)
@@ -361,7 +372,7 @@ class GameView(
                 FxKind.WIN -> {
                     sfx.play(Snd.WIN)
                     overAt = clock
-                    armAt = clock + RESULT_DELAY + if (screen == Screen.TUG) PANEL_GUARD else 0f
+                    armAt = clock + RESULT_DELAY + if (fingersOnScreen) PANEL_GUARD else 0f
                     solo?.takeIf { screen == Screen.SOLO }?.let { g ->
                         fasterThanBefore = prefs.recordWin(g.level, g.goals, g.time)
                         if (g.level >= prefs.unlocked && g.level < Levels.COUNT) prefs.unlocked = g.level + 1
@@ -370,7 +381,7 @@ class GameView(
                 FxKind.LOSE -> {
                     sfx.play(Snd.LOSE)
                     overAt = clock
-                    armAt = clock + RESULT_DELAY
+                    armAt = clock + RESULT_DELAY + if (fingersOnScreen) PANEL_GUARD else 0f
                     if (screen == Screen.RUSH) bankRush()
                 }
             }
@@ -388,7 +399,13 @@ class GameView(
     // ---------------------------------------------------------------- input
 
     override fun onApplyWindowInsets(insets: WindowInsets): WindowInsets {
-        if (Build.VERSION.SDK_INT >= 28) safeTop = (insets.displayCutout?.safeInsetTop ?: 0).toFloat()
+        var top = if (Build.VERSION.SDK_INT >= 28) insets.displayCutout?.safeInsetTop ?: 0 else 0
+        // Before Android 10 a split-screen window keeps its status bar and still draws under it.
+        if (Build.VERSION.SDK_INT < 29 && (context as? Activity)?.isInMultiWindowMode == true) {
+            @Suppress("DEPRECATION")
+            top = max(top, insets.systemWindowInsetTop)
+        }
+        safeTop = top.toFloat()
         return super.onApplyWindowInsets(insets)
     }
 
@@ -521,8 +538,8 @@ class GameView(
         if (shake > 0f) {
             // A short, small jolt when a ball is lost.
             val a = 1.1f * u * shake / SHAKE_T
-            ox += sin(clock * 95f) * a
-            oy += cos(clock * 83f) * a
+            ox += sin(clock * 95.0).toFloat() * a
+            oy += cos(clock * 83.0).toFloat() * a
         }
     }
 
@@ -709,7 +726,7 @@ class GameView(
         ink.color = INK
         ink.strokeWidth = 0.6f * u
         Sketch.rect(c, tmpRect.left, tmpRect.top, tmpRect.right, tmpRect.bottom, ink, 960 + boil, 1f * u)
-        val pulse = 1f + 0.04f * sin(clock * 5f)
+        val pulse = 1f + 0.04f * sin(clock * 5.0).toFloat()
         txt(c, "Tap to start", cx, cy - 3.6f * u, 7.4f * u * pulse, INK)
         txt(c, sub, cx, cy + 4.8f * u, 3.7f * u, if (tooSteep) BAD else GREY)
         c.restore()
@@ -929,7 +946,7 @@ class GameView(
         txt(c, if (last) "All levels done!" else "Sorted!", cx, t + 10.5f * u, 8f * u, GOOD)
         // One row per star; they are revealed one after another.
         val labels = arrayOf("Sorted", "No outs", "Under ${clockText(g.par)}")
-        val since = clock - overAt - RESULT_DELAY
+        val since = (clock - overAt - RESULT_DELAY).toFloat()
         for (i in 0 until 3) {
             val y = t + (24f + i * 9.5f) * u
             val shown = i < rowsShown
@@ -1064,8 +1081,11 @@ class GameView(
         /** After a screen change, taps are ignored this long, so a double tap cannot press a button it never saw. */
         const val TAP_GUARD = 0.25f
 
-        /** Longer guard for panels that appear under fingers already tapping (Tug). */
+        /** Longer guard for panels that appear under fingers already on the screen. */
         const val PANEL_GUARD = 0.6f
+
+        /** How long Tug's shoves take to charge at the start of a match. */
+        const val TUG_KICKOFF = 0.6f
 
         /** Semitones of a major scale. */
         private val SCALE = intArrayOf(0, 2, 4, 5, 7, 9, 11, 12)

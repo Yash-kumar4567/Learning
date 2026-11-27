@@ -5,6 +5,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.hardware.display.DisplayManager
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
@@ -37,6 +38,16 @@ class Tilt(private val context: Context) : SensorEventListener {
     private var flatCalY = 0f
     private var rotation = Surface.ROTATION_0
     private var untilRotationCheck = 0
+    private val displays = context.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+
+    /** Told at once when the screen turns; the periodic check in [onSensorChanged] is the fallback. */
+    private val displayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayAdded(displayId: Int) {}
+        override fun onDisplayRemoved(displayId: Int) {}
+        override fun onDisplayChanged(displayId: Int) {
+            rotation = displayRotation()
+        }
+    }
 
     /** Tilt relative to the calibrated rest position. */
     val x: Float get() = shape(rawX - calX)
@@ -55,11 +66,21 @@ class Tilt(private val context: Context) : SensorEventListener {
 
     fun start() {
         untilRotationCheck = 0
+        rotation = displayRotation()
+        try {
+            displays?.registerDisplayListener(displayListener, null)
+        } catch (e: Exception) {
+            // The periodic check still follows the rotation.
+        }
         sensor?.let { manager?.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
     }
 
     fun stop() {
         manager?.unregisterListener(this)
+        try {
+            displays?.unregisterDisplayListener(displayListener)
+        } catch (e: Exception) {
+        }
     }
 
     /**
@@ -74,8 +95,9 @@ class Tilt(private val context: Context) : SensorEventListener {
     }
 
     /**
-     * Two-player mode: take a phone that is lying nearly flat as exactly flat, so a sloping
-     * table or a camera bump does not favour one seat. A phone held at an angle is left alone.
+     * Two-player mode: take a phone that is lying nearly flat (within about 4.5 degrees) as
+     * exactly flat, so a sloping table or a camera bump does not favour one seat. A phone held
+     * at an angle is left alone.
      */
     fun zeroFlat() {
         val nearlyFlat = hypot(rawX, rawY) < FLAT_REST
@@ -137,7 +159,7 @@ class Tilt(private val context: Context) : SensorEventListener {
         const val MAX_TILT = 0.5f
         const val SMOOTH = 0.3f
         const val MAX_REST = 0.77f
-        const val FLAT_REST = 0.15f
+        const val FLAT_REST = 0.08f
 
         /** Sensitivity settings: low, normal, high. */
         val GAINS = floatArrayOf(0.65f, 1f, 1.5f)

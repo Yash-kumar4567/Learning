@@ -127,12 +127,56 @@ class GameViewTest {
         tap(v, w / 2f, h * 0.8f)
         assertTrue("first tap starts the round", v.ready)
         val g = v.tug!!
+        // The other player's "tap to start" lands a moment later. It must not shove.
+        val still = g.world.balls.map { it.vy }
+        tap(v, w / 2f, h * 0.2f)
+        assertEquals(still, g.world.balls.map { it.vy })
+        assertTrue(g.cooldown[1] <= GameView.TUG_KICKOFF)
+        // Once the shoves have charged, each half shoves for its own player.
+        v.simulate(GameView.TUG_KICKOFF + 0.1f, 0f, 0f, start = false)
         assertEquals(0f, g.cooldown[0], 0f)
         tap(v, w * 0.3f, h * 0.8f)
-        assertTrue("bottom half is player 0", g.cooldown[0] > 0f)
+        assertTrue("bottom half is player 0", g.cooldown[0] > 1f)
         assertEquals(0f, g.cooldown[1], 0f)
+        assertTrue("away from player 0 is up the screen", g.world.balls.all { it.vy < 0f })
         tap(v, w * 0.3f, h * 0.2f)
-        assertTrue("top half is player 1", g.cooldown[1] > 0f)
+        assertTrue("top half is player 1", g.cooldown[1] > 1f)
+    }
+
+    @Test fun withNoSensorAResultPanelWaitsBeforeItsButtonsWork() {
+        // Dragging to tilt keeps a finger on the glass, right where the panel's buttons appear.
+        val v = launch(withSensor = false).view
+        v.startSolo(3)
+        var waited = 0f
+        while (!v.solo!!.lost && waited < 60f) {
+            v.simulate(0.1f, 0f, 0.4f)
+            waited += 0.1f
+        }
+        assertTrue(v.solo!!.lost)
+        val lost = v.solo
+        // The panel appears after the short beat that follows the last out.
+        v.simulate(GameView.RESULT_DELAY + 0.1f, 0f, 0f, start = false)
+        tap(v, w / 2f, h / 2f + 0.01f * w)
+        assertTrue("\"Try again\" ignored a touch that was already on its way", v.solo === lost)
+        wait(v, 0.7f)
+        tap(v, w / 2f, h / 2f + 0.01f * w)
+        assertTrue("and works once the player has seen it", v.solo !== lost)
+    }
+
+    @Test fun theClockKeepsRunningAfterDaysOnScreen() {
+        val v = launch().view
+        // Four days of frames; a Float count of seconds would have stopped advancing by now.
+        val field = GameView::class.java.getDeclaredField("clock").apply { isAccessible = true }
+        field.setDouble(v, 4.0 * 24 * 3600)
+        v.startSolo(1)
+        tap(v, w / 2f, h / 2f)
+        assertFalse(v.ready)
+        wait(v)
+        tap(v, w / 2f, h / 2f)
+        assertTrue("the tap guard still runs out", v.ready)
+        v.simulate(8f, 0f, -0.2f)
+        assertTrue(v.solo!!.won)
+        assertEquals(GameView.Screen.SOLO, v.screen)
     }
 
     @Test fun tugPanelsIgnoreTapsThatWereAlreadyOnTheirWay() {

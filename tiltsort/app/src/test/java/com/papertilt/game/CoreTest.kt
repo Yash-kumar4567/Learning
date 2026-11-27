@@ -3,6 +3,7 @@ package com.papertilt.game
 import com.papertilt.game.core.Ball
 import com.papertilt.game.core.BallState
 import com.papertilt.game.core.EvType
+import com.papertilt.game.core.FxKind
 import com.papertilt.game.core.Hole
 import com.papertilt.game.core.Levels
 import com.papertilt.game.core.RushGame
@@ -170,6 +171,14 @@ class CoreTest {
         assertEquals(SoloGame.GOAL_SORTED or SoloGame.GOAL_CLEAN, slow.goals)
         assertEquals(2, slow.stars)
 
+        // An out costs the no-outs star and nothing else.
+        val scuffed = SoloGame(1)
+        scuffed.outs = 1
+        repeat(1200) { scuffed.step(dt, 0f, -0.2f) }
+        assertTrue(scuffed.won)
+        assertEquals(SoloGame.GOAL_SORTED or SoloGame.GOAL_FAST, scuffed.goals)
+        assertEquals(2, scuffed.stars)
+
         val unfinished = SoloGame(1)
         assertEquals(0, unfinished.stars)
     }
@@ -201,6 +210,21 @@ class CoreTest {
         assertTrue("bigger hole", w.inDanger(Ball(50f, 50f, Size.S, 3)))
         assertFalse("own hole", w.inDanger(Ball(20f, 46f, Size.S, 4)))
         assertFalse("a big ball rolls over a small hole", w.inDanger(Ball(20f, 46f, Size.L, 5)))
+
+        val openRight = World(100f, 150f)
+        openRight.rails(true, false, true, true)
+        assertTrue(openRight.inDanger(Ball(95f, 75f, Size.S, 6)))
+        assertFalse(openRight.inDanger(Ball(5f, 75f, Size.S, 7)))
+        val openLeft = World(100f, 150f)
+        openLeft.rails(true, true, true, false)
+        assertTrue(openLeft.inDanger(Ball(5f, 75f, Size.S, 8)))
+        assertFalse(openLeft.inDanger(Ball(95f, 75f, Size.S, 9)))
+
+        w.holes[0].filled = true
+        assertFalse("a filled hole is safe", w.inDanger(Ball(50f, 50f, Size.S, 10)))
+        val coming = Ball(50f, 145f, Size.S, 11)
+        coming.state = BallState.SPAWNING
+        assertFalse("not rolling yet", w.inDanger(coming))
     }
 
     @Test fun rushSpawnsScoresAndEnds() {
@@ -230,6 +254,7 @@ class CoreTest {
         assertEquals(2, g.multiplier)
         repeat(6) { sink(g) }
         assertEquals("chain is capped", 5, g.multiplier)
+        assertEquals("each sink pays ten times the multiplier it was made at", 10 + 20 + 30 + 40 + 50 + 50 + 50, g.score)
         // Waiting lets the chain run down one link at a time.
         val window = g.chainWindow
         g.world.balls.clear()
@@ -241,6 +266,16 @@ class CoreTest {
         }
         assertEquals(4, g.multiplier)
         assertTrue("a link lasts about one window", waited <= window + 0.1f && waited > window - 0.6f)
+        // The next link gets a whole window of its own; the chain does not collapse at once.
+        val next = g.chainWindow
+        var held = 0f
+        while (g.multiplier == 4 && held < 20f) {
+            g.world.balls.clear()
+            g.step(dt, 0f, 0f)
+            held += dt
+        }
+        assertEquals(3, g.multiplier)
+        assertTrue("the next link lasts a whole window", held > next - 0.1f && held < next + 0.1f)
         // An out breaks it.
         sink(g, wrong = true)
         assertEquals(1, g.outs)
@@ -257,6 +292,18 @@ class CoreTest {
         assertEquals(0, g.outs)
         // With no out to erase, a streak changes nothing.
         repeat(RushGame.MEND_EVERY) { sink(g) }
+        assertEquals(0, g.outs)
+    }
+
+    @Test fun rushAnOutRestartsTheCountToTen() {
+        val g = RushGame(seed = 7)
+        repeat(RushGame.MEND_EVERY - 1) { sink(g) }
+        sink(g, wrong = true)
+        assertEquals(1, g.outs)
+        // The tenth sink overall is only the first since the out.
+        sink(g)
+        assertEquals(1, g.outs)
+        repeat(RushGame.MEND_EVERY - 1) { sink(g) }
         assertEquals(0, g.outs)
     }
 
@@ -288,6 +335,31 @@ class CoreTest {
         }
     }
 
+    @Test fun tugTwoMarblesLeavingTogetherAtMatchPointScoreOnce() {
+        val g = TugGame()
+        g.score[0] = 6
+        for (i in 0..1) {
+            g.world.balls[i].y = 0.5f
+            g.world.balls[i].vy = -100f
+        }
+        g.step(dt, 0f, 0f)
+        assertEquals(7, g.score[0])
+        assertEquals(0, g.winner)
+        assertEquals("the win is announced once", 1, g.fx.count { it.kind == FxKind.WIN })
+
+        // One marble out of each end in the same step at 6-6: only one of them can be the winner.
+        val tie = TugGame()
+        tie.score[0] = 6
+        tie.score[1] = 6
+        tie.world.balls[0].y = 0.5f
+        tie.world.balls[0].vy = -100f
+        tie.world.balls[1].y = 149.5f
+        tie.world.balls[1].vy = 100f
+        tie.step(dt, 0f, 0f)
+        assertEquals(13, tie.score.sum())
+        assertTrue(tie.winner >= 0)
+    }
+
     @Test fun shovePushesAwayFromThePlayerAndCoolsDown() {
         val g = TugGame()
         g.shove(0)
@@ -302,9 +374,18 @@ class CoreTest {
         val g = TugGame()
         val b = g.world.balls[0]
         b.y = 140f
-        b.vy = 90f
+        b.vy = World.MAX_V
         g.shove(0)
+        // The kick alone (112) would not turn a marble at top speed; stopping it first does.
         assertTrue("a marble about to leave player 0's end is turned round", b.vy < 0f)
+        // A marble racing towards player 1's end from the far side is only slowed a little:
+        // it loses a fifteenth of its speed (-90 to -84) and gets a fifteenth of the kick (+8).
+        val k = TugGame()
+        val coming = k.world.balls[0]
+        coming.y = 140f
+        coming.vy = -90f
+        k.shove(1)
+        assertEquals(-76f, coming.vy, 0.5f)
         // The same marble is far from player 1, whose shove barely moves it.
         val h = TugGame()
         val far = h.world.balls[0]

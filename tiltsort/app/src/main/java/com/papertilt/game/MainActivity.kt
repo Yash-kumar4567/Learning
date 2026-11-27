@@ -59,6 +59,14 @@ class MainActivity : Activity() {
     }
 
     @Deprecated("Deprecated in Java")
+    override fun onMultiWindowModeChanged(isInMultiWindowMode: Boolean) {
+        @Suppress("DEPRECATION")
+        super.onMultiWindowModeChanged(isInMultiWindowMode)
+        // Entering or leaving split-screen changes what covers the top of the window.
+        view.requestApplyInsets()
+    }
+
+    @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         if (!view.onBack()) {
             @Suppress("DEPRECATION")

@@ -64,49 +64,50 @@ object Levels {
     )
 
     /**
-     * Levels 5..40. One new thing at a time: the rail count, the ball count, the first sand,
-     * and each extra moving hole all change on different levels, and the level that
-     * introduces something is a gentle one (roomier solution, more than one way to start).
-     * From level 24 on the rail count goes 0, 1 or 2 so that late levels differ in kind.
+     * Levels 5..40. Every level has exactly one hole per ball, so the only wrong holes are the
+     * other balls' bigger ones. One new thing at a time: the rail count, the ball count, the
+     * first sand and each extra moving hole all change on different levels. The ramp is steep:
+     * four balls by level 10, no rails by 16, six balls by 19, seven by 33. From level 16 on
+     * the rail count goes 0, 1 or 2 so that late levels differ in kind.
      */
     private val SPECS: List<Spec> = listOf(
         //   rails balls holes moving sand walls  edge  keep
-        Spec(3, 2, 3, 0, 0, 1, 16f, 8f, 2, true),  // 5  two balls at once
-        Spec(3, 2, 3, 0, 0, 1, 16f, 8f),           // 6
-        Spec(3, 2, 3, 0, 0, 2, 16f, 7f),           // 7
-        Spec(3, 3, 4, 0, 0, 1, 16f, 8f, 2, true),  // 8  three balls
-        Spec(3, 3, 4, 0, 0, 2, 16f, 7f),           // 9
-        Spec(3, 3, 4, 0, 1, 1, 16f, 8f, 2, true),  // 10 first sand
-        Spec(3, 3, 5, 0, 1, 2, 16f, 7f),           // 11
-        Spec(2, 3, 4, 0, 1, 1, 16f, 8f, 2, true),  // 12 two rails
-        Spec(2, 3, 5, 0, 1, 2, 15f, 7f),           // 13
-        Spec(2, 3, 5, 0, 2, 2, 15f, 7f),           // 14
-        Spec(2, 3, 4, 1, 1, 1, 16f, 8f, 2, true),  // 15 first moving hole
-        Spec(2, 3, 5, 1, 1, 2, 15f, 7f),           // 16
-        Spec(2, 3, 5, 1, 1, 2, 15f, 6f),           // 17
-        Spec(1, 3, 4, 1, 1, 1, 16f, 8f, 2, true),  // 18 one rail
-        Spec(1, 3, 5, 1, 1, 2, 15f, 7f),           // 19
-        Spec(1, 3, 5, 1, 2, 2, 15f, 6f),           // 20
-        Spec(1, 4, 5, 1, 1, 1, 16f, 8f, 2, true),  // 21 four balls
-        Spec(1, 4, 6, 1, 1, 2, 15f, 7f),           // 22
-        Spec(1, 4, 6, 1, 2, 2, 15f, 6f),           // 23
-        Spec(0, 4, 5, 1, 1, 1, 16f, 8f, 2, true),  // 24 no rails
-        Spec(0, 4, 6, 1, 1, 2, 15f, 7f),           // 25
-        Spec(2, 4, 6, 1, 2, 2, 14f, 6f),           // 26
-        Spec(2, 4, 6, 2, 1, 2, 15f, 7f, 2, true),  // 27 second moving hole
-        Spec(0, 4, 6, 2, 1, 2, 14f, 6f),           // 28
-        Spec(1, 4, 7, 2, 2, 2, 13f, 6f),           // 29
-        Spec(1, 5, 7, 2, 1, 2, 14f, 7f, 2, true),  // 30 five balls
-        Spec(0, 5, 7, 2, 1, 2, 13f, 6f),           // 31
-        Spec(2, 5, 8, 2, 2, 3, 12f, 6f, big = true),  // 32
-        Spec(0, 5, 7, 2, 2, 2, 12f, 6f, big = true),  // 33
-        Spec(1, 5, 8, 2, 2, 3, 12f, 6f, big = true),  // 34
-        Spec(1, 5, 7, 3, 1, 2, 13f, 6f, 2, true),  // 35 third moving hole
-        Spec(0, 5, 7, 3, 1, 2, 12f, 6f, big = true),  // 36
-        Spec(2, 5, 8, 3, 2, 3, 12f, 6f, big = true),  // 37
-        Spec(2, 6, 8, 3, 1, 2, 13f, 6f, 2, true),  // 38 six balls
-        Spec(1, 6, 8, 3, 2, 3, 12f, 6f, big = true),  // 39
-        Spec(0, 6, 7, 3, 1, 2, 12f, 6f, big = true),  // 40
+        Spec(3, 2, 2, 0, 0, 1, 15f, 7f, 2, true),  // 5 two balls at once
+        Spec(3, 3, 3, 0, 0, 1, 15f, 7f),  // 6 three balls
+        Spec(3, 3, 3, 0, 0, 2, 15f, 7f),  // 7 
+        Spec(2, 3, 3, 0, 0, 2, 15f, 7f),  // 8 two rails
+        Spec(2, 3, 3, 0, 1, 2, 15f, 7f),  // 9 first sand
+        Spec(2, 4, 4, 0, 1, 2, 15f, 7f),  // 10 four balls
+        Spec(2, 4, 4, 1, 1, 2, 14f, 6f, 2, true),  // 11 first moving hole
+        Spec(1, 4, 4, 1, 1, 2, 14f, 6f),  // 12 one rail
+        Spec(1, 4, 4, 1, 2, 2, 14f, 6f, big = true),  // 13 
+        Spec(1, 5, 5, 1, 1, 2, 14f, 6f),  // 14 five balls
+        Spec(1, 5, 5, 1, 2, 2, 14f, 6f, big = true),  // 15 
+        Spec(0, 5, 5, 1, 1, 2, 14f, 6f, 2),  // 16 no rails
+        Spec(0, 5, 5, 2, 1, 2, 14f, 6f),  // 17 second moving hole
+        Spec(2, 5, 5, 2, 2, 3, 13f, 6f, big = true),  // 18 
+        Spec(2, 6, 6, 2, 2, 3, 13f, 6f),  // 19 six balls
+        Spec(1, 6, 6, 2, 2, 3, 13f, 6f, big = true),  // 20 
+        Spec(1, 6, 6, 3, 1, 2, 13f, 6f),  // 21 third moving hole
+        Spec(0, 6, 6, 3, 1, 2, 13f, 6f, big = true),  // 22 
+        Spec(0, 6, 6, 3, 2, 2, 13f, 6f, big = true),  // 23 
+        Spec(2, 6, 6, 3, 2, 3, 13f, 6f, big = true),  // 24 
+        Spec(1, 6, 6, 3, 2, 3, 13f, 6f, big = true),  // 25 
+        Spec(0, 6, 6, 3, 1, 2, 13f, 6f, big = true),  // 26 
+        Spec(0, 6, 6, 3, 2, 3, 13f, 5f, big = true),  // 27 
+        Spec(1, 6, 6, 3, 2, 3, 13f, 5f, big = true),  // 28 
+        Spec(2, 6, 6, 3, 2, 3, 12f, 5f, big = true),  // 29 
+        Spec(0, 6, 6, 3, 1, 2, 12f, 5f, big = true),  // 30 
+        Spec(1, 6, 6, 3, 2, 3, 12f, 5f, big = true),  // 31 
+        Spec(2, 6, 6, 3, 2, 3, 12f, 5f, big = true),  // 32 
+        Spec(2, 7, 7, 3, 2, 2, 12f, 5f),  // 33 seven balls
+        Spec(1, 7, 7, 3, 2, 2, 12f, 5f, big = true),  // 34 
+        Spec(0, 7, 7, 3, 1, 2, 12f, 5f, big = true),  // 35 
+        Spec(0, 7, 7, 3, 2, 2, 12f, 5f, big = true),  // 36 
+        Spec(2, 7, 7, 3, 2, 3, 12f, 5f, big = true),  // 37 
+        Spec(1, 7, 7, 3, 2, 3, 12f, 5f, big = true),  // 38 
+        Spec(0, 7, 7, 3, 2, 2, 12f, 5f, big = true),  // 39 
+        Spec(0, 7, 7, 3, 1, 2, 12f, 5f, big = true),  // 40 
     )
 
     /**
@@ -114,9 +115,9 @@ object Levels {
      * solvability probe so that measured difficulty rises steadily; see SolvabilityProbe.
      */
     private val PICK = intArrayOf(
-        9, 8, 4, 12, 16, 11, 24, 77, 23, 26, 3, 19,
-        2, 63, 76, 19, 456, 278, 348, 150, 400, 21, 175, 80,
-        21, 3028, 5069, 2267, 4429, 8536, 6390, 56554, 11320, 27327, 679655, 341716,
+        3, 0, 4, 17, 8, 2, 35, 7, 15, 9, 409, 669,
+        187, 826, 6863, 36130, 35, 13356, 118688, 1417, 45205, 15416, 81634, 33501,
+        4194, 66403, 45785, 22215, 7630, 36421, 100464, 2306705, 137289, 11797, 226241, 276053,
     )
 
     /**
@@ -126,10 +127,10 @@ object Levels {
      * from a bot, not a person: re-derive the table whenever a layout or the physics changes.
      */
     private val PAR = intArrayOf(
-        8, 8, 8, 10, 8, 8, 8, 11, 10, 11,
-        10, 9, 10, 8, 10, 10, 10, 10, 11, 10,
-        10, 8, 14, 12, 12, 17, 13, 14, 11, 15,
-        13, 14, 15, 15, 15, 11, 16, 15, 19, 17,
+        8, 8, 8, 9, 8, 9, 10, 11, 8, 11,
+        12, 12, 9, 12, 10, 14, 14, 11, 17, 17,
+        15, 23, 14, 20, 19, 21, 17, 21, 14, 14,
+        23, 19, 17, 18, 17, 25, 17, 16, 19, 14,
     )
 
     /** For the tuning probe only: try this layout number instead of the picked one, on this thread. */
@@ -170,7 +171,6 @@ object Levels {
             World(W, H).apply {
                 rails(false, true, false, true)
                 holes.add(Hole(50f, 32f, Size.M))
-                holes.add(Hole(24f, 75f, Size.L))
                 balls.add(Ball(50f, 118f, Size.M, 0))
             },
             "No rail on a dashed edge.\nRoll off the paper and you're OUT.",
@@ -183,7 +183,6 @@ object Levels {
                 walls.add(Wall(78f, 20f, 78f, 50f))
                 holes.add(Hole(64f, 34f, Size.S))
                 holes.add(Hole(28f, 34f, Size.M))
-                holes.add(Hole(50f, 100f, Size.L))
                 balls.add(Ball(30f, 125f, Size.S, 0))
                 balls.add(Ball(72f, 125f, Size.M, 1))
             },

@@ -270,7 +270,14 @@ class LevelsTest {
         assertEquals(150f, Levels.H, 0f)
     }
 
-    @Test fun theFirstThreeTutorialsAreUntouched() {
+    @Test fun everyLevelHasExactlyOneHolePerBall() {
+        for (n in 1..Levels.COUNT) {
+            val w = world(n)
+            assertEquals("level $n", w.balls.map { it.size }.sortedBy { it.ordinal }, w.holes.map { it.size }.sortedBy { it.ordinal })
+        }
+    }
+
+    @Test fun theFirstThreeTutorialsAreAsDesigned() {
         fun balls(w: World) = w.balls.map { "${it.size}@${it.x},${it.y}" }
         fun holes(w: World) = w.holes.map { h: Hole -> "${h.size}@${h.baseX},${h.baseY}" + if (h.moving) "~" else "" }
         val one = world(1)
@@ -284,7 +291,7 @@ class LevelsTest {
         val three = world(3)
         assertTrue(three.railed.contentEquals(booleanArrayOf(false, true, false, true)))
         assertEquals(listOf("M@50.0,118.0"), balls(three))
-        assertEquals(listOf("M@50.0,32.0", "L@24.0,75.0"), holes(three))
+        assertEquals(listOf("M@50.0,32.0"), holes(three))
         for (n in 1..3) {
             assertEquals(0, inner(world(n)).size)
             assertEquals(0, world(n).sand.size)

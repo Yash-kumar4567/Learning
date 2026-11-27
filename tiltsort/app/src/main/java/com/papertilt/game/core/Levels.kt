@@ -6,8 +6,14 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
 
-/** A level ready to play. [par] is the time in seconds to beat for the third star. */
-class Built(val world: World, val hint: String?, val par: Float = Levels.defaultPar(world))
+/**
+ * A level ready to play. [par] is the time in seconds to beat for the third star, [outs] how
+ * many lost balls end the level, and [limit] the seconds on its clock.
+ */
+class Built(val world: World, val hint: String?, val par: Float = Levels.defaultPar(world)) {
+    var outs = MAX_OUTS
+    var limit = par * 3f
+}
 
 /**
  * The campaign. Levels 1-4 are hand-made tutorials; the rest are generated from a plan
@@ -45,6 +51,12 @@ object Levels {
 
     /** Rim-to-rim distance between two holes. */
     internal const val HOLE_GAP = 10f
+
+    /** At the last level tilt pushes this much harder, and the paper has this much less drag. */
+    internal const val MAX_PUSH = 0.5f
+    internal const val MAX_SLIP = 0.5f
+    internal const val OUTS_TWO_FROM = 12
+    internal const val OUTS_ONE_FROM = 34
 
     private const val HINT_TOGETHER = "All balls roll together.\nPlan the order."
     private const val HINT_SAND = "Sand slows everything down."
@@ -146,7 +158,30 @@ object Levels {
 
     private fun par(n: Int): Float = PAR[n - 1].toFloat()
 
-    fun build(n: Int): Built = when (n) {
+    /** 0 on level 1, 1 on the last level, rising fastest early so that each new level is felt. */
+    internal fun hardness(n: Int): Float = Math.pow(((n - 1).coerceIn(0, COUNT - 1) / (COUNT - 1f)).toDouble(), 0.7).toFloat()
+
+    /** Lost balls that end level [n]: three at first, then two, then a single one. */
+    fun outsAllowed(n: Int): Int = when {
+        n < OUTS_TWO_FROM -> 3
+        n < OUTS_ONE_FROM -> 2
+        else -> 1
+    }
+
+    /**
+     * Level [n] with its difficulty applied. Beyond the layout, every level is a little harder
+     * than the one before: the balls are pushed harder and the paper is more slippery, later
+     * levels forgive fewer outs, and the clock allows less slack over par.
+     */
+    fun build(n: Int): Built = layoutOf(n).also {
+        val d = hardness(n)
+        it.world.push = 1f + MAX_PUSH * d
+        it.world.grip = 1f - MAX_SLIP * d
+        it.outs = outsAllowed(n)
+        it.limit = ceil(it.par * (3f - 1.4f * d))
+    }
+
+    private fun layoutOf(n: Int): Built = when (n) {
         1 -> Built(
             World(W, H).apply {
                 rails(true, true, true, true)

@@ -86,6 +86,12 @@ class World(val w: Float, val h: Float, val holesFill: Boolean = true) {
     val events = ArrayList<Event>()
     var time = 0f
 
+    /** How hard tilt pushes the balls here, as a multiple of [ACC]. Later levels push harder. */
+    var push = 1f
+
+    /** How much drag the paper has, as a multiple of [FRICTION]. Later levels are more slippery. */
+    var grip = 1f
+
     /** Which edges have a rail: top, right, bottom, left. The others are open. */
     val railed = BooleanArray(4)
 
@@ -168,9 +174,9 @@ class World(val w: Float, val h: Float, val holesFill: Boolean = true) {
     }
 
     private fun roll(b: Ball, dt: Float, tx: Float, ty: Float) {
-        b.vx += tx * ACC * dt
-        b.vy += ty * ACC * dt
-        var fr = FRICTION
+        b.vx += tx * ACC * push * dt
+        b.vy += ty * ACC * push * dt
+        var fr = FRICTION * grip
         for (z in sand) if (z.contains(b.x, b.y)) fr = SAND_FRICTION
         val k = max(0f, 1f - fr * dt)
         b.vx *= k

@@ -183,6 +183,34 @@ class CoreTest {
         assertEquals(0, unfinished.stars)
     }
 
+    @Test fun theClockRunningOutLosesTheLevel() {
+        val g = SoloGame(1)
+        var steps = 0
+        while (!g.over && steps < 120 * 600) {
+            g.step(dt, 0f, 0f)
+            steps++
+        }
+        assertTrue(g.lost)
+        assertTrue(g.timedOut)
+        assertEquals(0, g.outs)
+        assertEquals(g.limit, g.time, 0.02f)
+        assertEquals(0f, g.timeLeft, 0.02f)
+    }
+
+    @Test fun laterLevelsEndOnFewerOuts() {
+        val last = SoloGame(Levels.COUNT)
+        assertEquals(1, last.maxOuts)
+        // Tipped hard over with no rails, the first ball off the paper ends it.
+        var steps = 0
+        while (!last.over && steps < 120 * 30) {
+            last.step(dt, 0.5f, 0f)
+            steps++
+        }
+        assertTrue(last.lost)
+        assertFalse(last.timedOut)
+        assertEquals(1, last.outs)
+    }
+
     @Test fun aBallWaitsToRespawnUntilItsSpotIsClear() {
         val w = World(100f, 150f)
         w.rails(true, true, true, true)

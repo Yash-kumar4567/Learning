@@ -270,6 +270,24 @@ class LevelsTest {
         assertEquals(150f, Levels.H, 0f)
     }
 
+    @Test fun everyLevelIsHarderThanTheOneBefore() {
+        var prev = Levels.build(1)
+        assertEquals(1f, prev.world.push, 0f)
+        assertEquals(1f, prev.world.grip, 0f)
+        assertEquals(3, prev.outs)
+        for (n in 2..Levels.COUNT) {
+            val b = Levels.build(n)
+            assertTrue("level $n pushes harder", b.world.push > prev.world.push)
+            assertTrue("level $n is more slippery", b.world.grip < prev.world.grip)
+            assertTrue("level $n never forgives more outs", b.outs <= prev.outs)
+            assertTrue("level $n leaves less slack over par", b.limit / b.par < prev.limit / prev.par + 0.2f)
+            assertTrue("level $n: the clock allows at least half as long again as par", b.limit >= b.par * 1.5f)
+            prev = b
+        }
+        assertEquals(1, prev.outs)
+        assertTrue(prev.world.grip >= 0.45f)
+    }
+
     @Test fun everyLevelHasExactlyOneHolePerBall() {
         for (n in 1..Levels.COUNT) {
             val w = world(n)

@@ -15,6 +15,9 @@ no image or sound files, and the debug APK is under 1 MB.
   a ball that rolls off it is an **out**. A ball about to cost an out gets a
   red outline.
 - Every ball feels the same tilt, so moving one moves them all.
+- Every level has one hole per ball and is harder than the one before: tilt
+  pushes the balls harder, the paper gets more slippery, the countdown clock
+  allows less slack, and later levels end on two outs, then on one.
 - Every round waits for a tap. However the phone is held at that moment counts
   as level, so it can be played flat on a palm or tipped towards you.
 
@@ -22,7 +25,7 @@ no image or sound files, and the debug APK is under 1 MB.
 
 | Mode | What it is |
 | --- | --- |
-| **Levels** | 40 levels. Three outs lose the level. A win earns up to three stars: one for sorting every ball, one for no outs, one for beating the level's par time. Later levels add pencil walls, sand that slows balls, holes that slide about, and fewer rails. |
+| **Levels** | 40 levels. Running out of outs (three at first, then two, then one) or out of time loses the level. A win earns up to three stars: one for sorting every ball, one for no outs, one for beating the level's par time. Later levels add pencil walls, sand that slows balls, holes that slide about, and fewer rails. |
 | **Rush** | Nine holes in a 3 x 3 grid and balls that keep arriving. Each sink adds a link to a chain multiplier (up to x5); the chain loses a link whenever its timer runs out, so waiting costs points. Ten sinks in a row erase an out. Three outs end the run. |
 | **2 Players: Tug** | The phone is held flat between two players and both tilt it. A marble that leaves through your rival's end is your point; tapping your half shoves the marbles away from you and stops one at your own edge. First to 7. |
 

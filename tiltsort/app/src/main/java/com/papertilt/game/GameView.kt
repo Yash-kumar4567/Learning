@@ -672,9 +672,9 @@ class GameView(
         }
     }
 
-    private fun drawOuts(c: Canvas, x: Float, y: Float, outs: Int) {
+    private fun drawOuts(c: Canvas, x: Float, y: Float, outs: Int, allowed: Int = MAX_OUTS) {
         val s = 5.2f * u
-        for (i in 0 until MAX_OUTS) {
+        for (i in 0 until allowed) {
             val l = x + i * (s + 1.6f * u)
             ink.color = INK
             ink.strokeWidth = 0.45f * u
@@ -697,8 +697,8 @@ class GameView(
     }
 
     /** The three star goals in one line, gold for those in [earned]. */
-    private fun goalsLine(c: Canvas, cx: Float, cy: Float, earned: Int, par: Float, size: Float) {
-        val labels = arrayOf("sorted", "no outs", "under ${clockText(par)}")
+    private fun goalsLine(c: Canvas, cx: Float, cy: Float, earned: Int, fast: String, size: Float) {
+        val labels = arrayOf("sorted", "no outs", fast)
         val starW = size * 1.35f
         val gap = size * 1.2f
         text.textSize = size
@@ -906,8 +906,17 @@ class GameView(
         drawWorld(c, g.world)
         drawFloaters(c)
         txt(c, "Level ${g.level}", 5f * u, hudY, 5.6f * u, INK, Paint.Align.LEFT)
-        txt(c, clockText(g.time), 43f * u, hudY, 5.2f * u, if (g.time > g.par) LATE else GREY)
-        drawOuts(c, 56f * u, hudY, g.outs)
+        // The countdown: grey while the speed star is still on, then ink, red for the last five seconds.
+        val left = g.timeLeft
+        val clockColor = when {
+            left <= 5f -> BAD
+            g.time > g.par -> INK
+            else -> GREY
+        }
+        val urgent = left <= 5f && !g.over && ready
+        val beat = if (urgent) 1f + 0.12f * abs(sin(clock * 6.3).toFloat()) else 1f
+        txt(c, clockText(left + 0.99f), 43f * u, hudY, 5.6f * u * beat, clockColor)
+        drawOuts(c, 56f * u, hudY, g.outs, g.maxOuts)
         // Under the tray: the level's hint, or else what the three stars are for.
         val hint = g.hint
         if (hint != null) {
@@ -918,14 +927,21 @@ class GameView(
                 y += 6f * u
             }
         } else {
-            goalsLine(c, width / 2f, height - 7.5f * u, prefs.goals(g.level), g.par, 3.8f * u)
+            // The clock counts down, so the speed star is given as the time that must be left on it.
+            goalsLine(c, width / 2f, height - 7.5f * u, prefs.goals(g.level), "${clockText(g.limit - g.par)} left", 3.8f * u)
         }
         when {
             g.won && resultDue -> soloWonPanel(c, g)
             g.lost && resultDue -> {
                 val t = panel(c, 52f * u)
                 val cx = width / 2f
-                txt(c, "Three outs!", cx, t + 11f * u, 8f * u, BAD)
+                val why = when {
+                    g.timedOut -> "Out of time!"
+                    g.maxOuts == 1 -> "One out!"
+                    g.maxOuts == 2 -> "Two outs!"
+                    else -> "Three outs!"
+                }
+                txt(c, why, cx, t + 11f * u, 8f * u, BAD)
                 button(c, cx, t + 27f * u, 60f * u, 11f * u, "Try again", 930) { startSolo(g.level) }
                 button(c, cx, t + 42f * u, 60f * u, 11f * u, "Levels", 931) { begin(Screen.LEVELS) }
             }
@@ -1097,10 +1113,10 @@ class GameView(
             "own size and colour.",
             "A small ball in a bigger hole is OUT.",
             "Rolling off a dashed edge is OUT.",
-            "Three outs and the level is lost.",
+            "Too many outs, or time up: level lost.",
             "Big balls roll over small holes.",
-            "Stars: sort them all, have no outs,",
-            "and beat the clock.",
+            "Every level is faster and slippier.",
+            "Stars: sorted, no outs, and fast.",
             "",
             "#Rush",
             "Balls keep coming. Sink them quickly:",

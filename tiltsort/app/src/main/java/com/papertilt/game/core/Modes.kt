@@ -13,7 +13,7 @@ class Fx(val kind: FxKind, val x: Float, val y: Float, val n: Int = 0)
 const val MAX_OUTS = 3
 private const val RESPAWN_T = 0.8f
 
-/** Campaign level: put every ball in a hole of its size with fewer than three outs. */
+/** Campaign level: put every ball in a hole of its size before the clock or the outs run out. */
 class SoloGame(val level: Int) {
     private val built = Levels.build(level)
     val world: World = built.world
@@ -21,6 +21,13 @@ class SoloGame(val level: Int) {
 
     /** Seconds to beat for the third star. */
     val par: Float = built.par
+
+    /** Lost balls that end this level, and the seconds on its clock. */
+    val maxOuts: Int = built.outs
+    val limit: Float = built.limit
+    var timedOut = false
+        private set
+    val timeLeft: Float get() = max(0f, limit - time)
     val fx = ArrayList<Fx>()
     var outs = 0
     var time = 0f
@@ -54,10 +61,19 @@ class SoloGame(val level: Int) {
             }
         }
         world.events.clear()
-        if (outs >= MAX_OUTS) {
+        if (outs >= maxOuts) {
             lost = true
             fx.add(Fx(FxKind.LOSE, 0f, 0f))
             return
+        }
+        if (time >= limit && world.balls.none { it.state == BallState.SINKING && it.sunkOk }) {
+            // A ball already dropping into its hole when the clock runs out is allowed to land.
+            if (world.balls.any { it.state != BallState.HOME }) {
+                lost = true
+                timedOut = true
+                fx.add(Fx(FxKind.LOSE, 0f, 0f))
+                return
+            }
         }
         val it = respawn.entries.iterator()
         while (it.hasNext()) {

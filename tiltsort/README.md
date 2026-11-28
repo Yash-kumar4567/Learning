@@ -42,7 +42,7 @@ source. It needs Android 7.0 or newer.
 
 ## Build
 
-You need JDK 17 or newer and the Android SDK (platform 35). Either open this
+You need JDK 17 or newer and the Android SDK (platform 36). Either open this
 folder in Android Studio, or from a terminal:
 
 ```sh
@@ -51,8 +51,9 @@ export ANDROID_HOME=/path/to/android-sdk
 ./gradlew testDebugUnitTest    # rules, screens and screenshots
 ```
 
-`assembleRelease` produces an unsigned APK; sign it with your own key before
-publishing.
+`bundleRelease` produces the Android App Bundle for Google Play; it is signed
+when `keystore.properties` exists. `store/RELEASE.md` walks through publishing,
+and `store/` holds the listing text, images and privacy policy.
 
 ## Tests
 

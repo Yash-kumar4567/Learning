@@ -1,5 +1,6 @@
 package com.papertilt.game
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.media.AudioManager
 import android.os.Build
@@ -8,6 +9,7 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
+import android.window.OnBackInvokedDispatcher
 
 class MainActivity : Activity() {
     private lateinit var tilt: Tilt
@@ -33,6 +35,13 @@ class MainActivity : Activity() {
         view = GameView(this, tilt, sfx, prefs)
         setContentView(view)
         hideBars()
+        // From Android 13 the system asks for back through this callback, and an app that
+        // targets Android 16 no longer gets onBackPressed at all.
+        if (Build.VERSION.SDK_INT >= 33) {
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT) {
+                if (!view.onBack()) finish()
+            }
+        }
     }
 
     override fun onResume() {
@@ -66,6 +75,8 @@ class MainActivity : Activity() {
         view.requestApplyInsets()
     }
 
+    // Still how back arrives on Android 7 to 12; newer versions use the callback set in onCreate.
+    @SuppressLint("GestureBackNavigation")
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         if (!view.onBack()) {
